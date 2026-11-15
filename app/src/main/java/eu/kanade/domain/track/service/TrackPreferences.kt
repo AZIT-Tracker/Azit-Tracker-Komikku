@@ -54,5 +54,11 @@ class TrackPreferences(
 
     // KMK -->
     fun autoSyncProgressFromTrackers() = preferenceStore.getBoolean("pref_auto_sync_progress_from_trackers_key", true)
+
+    /** Azit Tracker: bind a library manga automatically the first time one of its chapters is read. */
+    fun azitAutoBind() = preferenceStore.getBoolean("pref_azit_auto_bind_key", true)
+
+    /** Azit Tracker: create the title in Azit when it is not in the library yet. */
+    fun azitCreateIfMissing() = preferenceStore.getBoolean("pref_azit_create_if_missing_key", true)
     // KMK <--
 }

@@ -30,6 +30,10 @@ class TrackChapter(
      */
     suspend fun await(context: Context, mangaId: Long, chapterNumber: Double, setupJobOnFailure: Boolean = true) {
         withNonCancellableContext {
+            // KMK -->
+            // Azit Tracker links a library manga by itself on the first chapter read.
+            trackerManager.azit.autoBind(mangaId)
+            // KMK <--
             val tracks = getTracks.await(mangaId)
             if (tracks.isEmpty()) return@withNonCancellableContext
 

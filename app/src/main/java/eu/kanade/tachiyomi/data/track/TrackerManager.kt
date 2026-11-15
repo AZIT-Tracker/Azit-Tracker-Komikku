@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.data.track
 
 import eu.kanade.tachiyomi.data.track.anilist.Anilist
+import eu.kanade.tachiyomi.data.track.azit.Azit
 import eu.kanade.tachiyomi.data.track.bangumi.Bangumi
 import eu.kanade.tachiyomi.data.track.kavita.Kavita
 import eu.kanade.tachiyomi.data.track.kitsu.Kitsu
@@ -22,6 +23,11 @@ class TrackerManager {
         // SY --> Mangadex from Neko
         const val MDLIST = 60L
         // SY <--
+
+        // KMK -->
+        // Azit Tracker (self-hosted). Far from upstream ids so future upstream trackers don't collide.
+        const val AZIT = 100L
+        // KMK <--
     }
 
     val mdList = MdList(MDLIST)
@@ -36,8 +42,17 @@ class TrackerManager {
     val kavita = Kavita(KAVITA)
     val suwayomi = Suwayomi(9L)
 
+    // KMK -->
+    val azit = Azit(AZIT)
+    // KMK <--
+
     val trackers =
-        listOf(mdList, myAnimeList, aniList, kitsu, shikimori, bangumi, komga, mangaUpdates, kavita, suwayomi)
+        listOf(
+            mdList, myAnimeList, aniList, kitsu, shikimori, bangumi, komga, mangaUpdates, kavita, suwayomi,
+            // KMK -->
+            azit,
+            // KMK <--
+        )
 
     fun loggedInTrackers() = trackers.filter { it.isLoggedIn }
 

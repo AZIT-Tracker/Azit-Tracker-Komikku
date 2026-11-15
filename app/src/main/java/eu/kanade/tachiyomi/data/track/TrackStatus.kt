@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.data.track
 
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.tachiyomi.data.track.anilist.Anilist
+import eu.kanade.tachiyomi.data.track.azit.Azit
 import eu.kanade.tachiyomi.data.track.bangumi.Bangumi
 import eu.kanade.tachiyomi.data.track.kitsu.Kitsu
 import eu.kanade.tachiyomi.data.track.komga.Komga
@@ -107,6 +108,19 @@ enum class TrackStatus(val int: Int, val res: StringResource) {
                         else -> null
                     }
                 }
+                // KMK -->
+                trackerManager.azit.id -> {
+                    when (status) {
+                        Azit.READING -> READING
+                        Azit.COMPLETED -> COMPLETED
+                        Azit.ON_HOLD -> PAUSED
+                        Azit.PLAN_TO_READ -> PLAN_TO_READ
+                        Azit.DROPPED -> DROPPED
+                        Azit.REREADING -> REPEATING
+                        else -> null
+                    }
+                }
+                // KMK <--
                 else -> null
             }
         }

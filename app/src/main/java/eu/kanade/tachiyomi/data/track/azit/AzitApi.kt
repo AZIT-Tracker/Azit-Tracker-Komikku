@@ -2,7 +2,9 @@ package eu.kanade.tachiyomi.data.track.azit
 
 import eu.kanade.tachiyomi.data.track.azit.dto.AzitEntry
 import eu.kanade.tachiyomi.data.track.azit.dto.AzitMe
+import eu.kanade.tachiyomi.data.track.azit.dto.AzitMediaPage
 import eu.kanade.tachiyomi.data.track.azit.dto.AzitProgressWrite
+import eu.kanade.tachiyomi.data.track.azit.dto.AzitSection
 import eu.kanade.tachiyomi.data.track.azit.dto.AzitTitleQuery
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.HttpException
@@ -10,6 +12,7 @@ import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.network.awaitSuccess
 import kotlinx.serialization.json.Json
 import okhttp3.Headers
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -63,6 +66,23 @@ class AzitApi(
         json.decodeFromString<AzitEntry>(response)
     }
 
+    /** Titles of the given types matching [query], with their covers (private ones too, with a device token). */
+    suspend fun searchMedia(query: String, typeIds: List<Long>, perPage: Int = 20): AzitMediaPage = withIOContext {
+        val url = "${server()}$MEDIA".toHttpUrl().newBuilder()
+            .addQueryParameter("search", query)
+            .apply { if (typeIds.isNotEmpty()) addQueryParameter("media_type_ids", typeIds.joinToString(",")) }
+            .addQueryParameter("per_page", perPage.toString())
+            .build()
+        val response = execute { client.newCall(GET(url, headers(token()))).awaitSuccess() }
+        json.decodeFromString<AzitMediaPage>(response)
+    }
+
+    /** Azit's tabs and their media types. */
+    suspend fun sections(): List<AzitSection> = withIOContext {
+        val response = execute { client.newCall(GET("${server()}$SECTIONS", headers(token()))).awaitSuccess() }
+        json.decodeFromString<List<AzitSection>>(response)
+    }
+
     /** The current state of a bound title. */
     suspend fun entry(mediaId: Long): AzitEntry = withIOContext {
         val response = execute { client.newCall(GET("${server()}$ENTRY/$mediaId", headers(token()))).awaitSuccess() }
@@ -100,6 +120,8 @@ class AzitApi(
         const val LOOKUP = "/api/tracking/lookup"
         const val PROGRESS = "/api/tracking/progress"
         const val ENTRY = "/api/tracking/entry"
+        const val MEDIA = "/api/media"
+        const val SECTIONS = "/api/sections"
 
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
 

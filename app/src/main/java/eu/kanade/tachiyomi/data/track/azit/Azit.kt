@@ -5,13 +5,17 @@ import dev.icerock.moko.resources.StringResource
 import eu.kanade.domain.chapter.model.toSChapter
 import eu.kanade.domain.manga.model.toSManga
 import eu.kanade.domain.track.interactor.AddTracks
+import eu.kanade.domain.track.model.toDbTrack
+import eu.kanade.domain.track.model.toDomainTrack
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.models.Track
 import eu.kanade.tachiyomi.data.track.BaseTracker
 import eu.kanade.tachiyomi.data.track.DeletableTracker
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.data.track.azit.AzitMapping.copyFrom
+import eu.kanade.tachiyomi.data.track.azit.dto.AzitEntry
 import eu.kanade.tachiyomi.data.track.azit.dto.AzitEntryFields
+import eu.kanade.tachiyomi.data.track.azit.dto.AzitMediaType
 import eu.kanade.tachiyomi.data.track.azit.dto.AzitProgressWrite
 import eu.kanade.tachiyomi.data.track.azit.dto.AzitTitleQuery
 import eu.kanade.tachiyomi.data.track.model.TrackSearch
@@ -27,15 +31,20 @@ import logcat.LogPriority
 import okhttp3.Dns
 import okhttp3.OkHttpClient
 import tachiyomi.core.common.i18n.stringResource
+import tachiyomi.core.common.preference.Preference
+import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.chapter.interactor.GetChaptersByMangaId
 import tachiyomi.domain.manga.interactor.GetManga
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.source.service.SourceManager
+import tachiyomi.domain.track.interactor.DeleteTrack
 import tachiyomi.domain.track.interactor.GetTracks
+import tachiyomi.domain.track.interactor.InsertTrack
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.kmk.KMR
 import uy.kohesive.injekt.injectLazy
+import java.util.concurrent.ConcurrentHashMap
 import tachiyomi.domain.track.model.Track as DomainTrack
 
 /**
@@ -76,6 +85,9 @@ class Azit(id: Long) : BaseTracker(id, "Azit Tracker"), DeletableTracker {
     private val getChaptersByMangaId: GetChaptersByMangaId by injectLazy()
     private val sourceManager: SourceManager by injectLazy()
     private val addTracks: AddTracks by injectLazy()
+    private val insertTrack: InsertTrack by injectLazy()
+    private val deleteTrack: DeleteTrack by injectLazy()
+    private val preferenceStore: PreferenceStore by injectLazy()
 
     /** Background work that outlives a screen (binding the library after login). */
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -145,7 +157,7 @@ class Azit(id: Long) : BaseTracker(id, "Azit Tracker"), DeletableTracker {
                 ),
             )
         }
-        return track.copyFrom(api.progress(write), getServer())
+        return track.copyEntry(api.progress(write))
     }
 
     /**
@@ -156,40 +168,58 @@ class Azit(id: Long) : BaseTracker(id, "Azit Tracker"), DeletableTracker {
     override suspend fun bind(track: Track, hasReadChapters: Boolean): Track {
         val write = when {
             track.remote_id == AzitMapping.CREATE_REMOTE_ID ->
-                AzitProgressWrite.from(query = fullQuery(track), createIfMissing = true, forceCreate = true)
+                AzitProgressWrite.from(
+                    // The fields edited in the "Create in Azit" dialog, else Komikku's data as is.
+                    query = pendingDrafts.remove(track.manga_id) ?: fullQuery(track),
+                    createIfMissing = true,
+                    forceCreate = true,
+                )
             track.remote_id > 0 -> AzitProgressWrite.from(query = boundQuery(track))
             else -> AzitProgressWrite.from(query = fullQuery(track), createIfMissing = createIfMissing())
         }
-        return track.copyFrom(api.progress(write), getServer())
+        return track.copyEntry(api.progress(write))
     }
 
+    /** Azit's catalogue (books only), with covers; "Create in Azit" is always the last result. */
     override suspend fun search(query: String): List<TrackSearch> {
-        val results = mutableListOf<TrackSearch>()
-        api.lookup(AzitTitleQuery(title = query))?.let { entry ->
-            results += TrackSearch.create(id).apply {
-                copyFrom(entry, getServer())
-                cover_url = entry.coverUrl?.let(::absoluteUrl).orEmpty()
-                publishing_type = entry.type.orEmpty()
-                summary = entry.status
-                    ?.let { context.stringResource(KMR.strings.azit_search_in_list, it) }
-                    ?: context.stringResource(KMR.strings.azit_search_not_in_list)
+        val server = getServer()
+        val results = try {
+            api.searchMedia(query, bookTypes().map { it.id }).items.map { media ->
+                TrackSearch.create(id).copyFrom(media, server).apply {
+                    summary = media.entry?.status
+                        ?.let { context.stringResource(KMR.strings.azit_search_in_list, it) }
+                        ?: context.stringResource(KMR.strings.azit_search_not_in_list)
+                }
             }
+        } catch (e: AzitException) {
+            if (e.code == 401 || e.code == 403) throw e
+            // Older servers: exact title match only.
+            logcat(LogPriority.WARN, e) { "Azit Tracker: media search failed, using lookup" }
+            listOfNotNull(
+                api.lookup(AzitTitleQuery(title = query))?.let { entry ->
+                    TrackSearch.create(id).apply {
+                        copyEntry(entry)
+                        cover_url = AzitMapping.absoluteUrl(entry.coverUrl, server).orEmpty()
+                        publishing_type = entry.type.orEmpty()
+                        summary = context.stringResource(KMR.strings.azit_search_not_in_list)
+                    }
+                },
+            )
         }
         // Always offered, even when a title matches: it may be the wrong one.
-        results += TrackSearch.create(id).apply {
+        return results + TrackSearch.create(id).apply {
             remote_id = AzitMapping.CREATE_REMOTE_ID
             title = context.stringResource(KMR.strings.azit_create_in_azit, query)
-            tracking_url = "${getServer()}/#create"
+            tracking_url = "$server/#create"
             status = PLAN_TO_READ
             summary = context.stringResource(KMR.strings.azit_create_in_azit_summary)
         }
-        return results
     }
 
     override suspend fun refresh(track: Track): Track {
-        if (track.remote_id > 0) return track.copyFrom(api.entry(track.remote_id), getServer())
+        if (track.remote_id > 0) return track.copyEntry(api.entry(track.remote_id))
         val entry = api.lookup(fullQuery(track)) ?: return track
-        return track.copyFrom(entry, getServer())
+        return track.copyEntry(entry)
     }
 
     /** "Remove from Azit": the entry leaves the library, the title stays in Azit's catalogue. */
@@ -206,6 +236,97 @@ class Azit(id: Long) : BaseTracker(id, "Azit Tracker"), DeletableTracker {
     }
 
     fun getServer(): String = getUsername()
+
+    // ---- Data Komikku's track has no field for (cover, volumes) ----
+
+    /** The cover Azit has for a bound title ("" when none), kept from the last answer of the server. */
+    fun coverPreference(mediaId: Long): Preference<String> = preferenceStore.getString("azit_cover_$mediaId", "")
+
+    /** Volumes read of a bound title, kept from the last answer of the server. */
+    fun volumePreference(mediaId: Long): Preference<String> = preferenceStore.getString("azit_volume_$mediaId", "")
+
+    private fun Track.copyEntry(entry: AzitEntry): Track {
+        copyFrom(entry, getServer())
+        coverPreference(entry.mediaId).set(AzitMapping.absoluteUrl(entry.coverUrl, getServer()).orEmpty())
+        volumePreference(entry.mediaId).set(entry.progress.volume?.let(AzitMapping::formatNumber).orEmpty())
+        return this
+    }
+
+    /** Sets the volumes read (from the track card). */
+    suspend fun setRemoteVolume(track: DomainTrack, volume: Double) {
+        val entry = api.progress(
+            AzitProgressWrite.from(query = AzitTitleQuery(mediaId = track.remoteId, title = track.title))
+                .copy(volume = volume, onlyForward = false),
+        )
+        val dbTrack = track.toDbTrack().copyEntry(entry)
+        dbTrack.toDomainTrack(idRequired = false)?.let { insertTrack.await(it) }
+    }
+
+    // ---- "Create in Azit" with edited fields ----
+
+    private val pendingDrafts = ConcurrentHashMap<Long, AzitTitleQuery>()
+
+    private var cachedBookTypes: List<AzitMediaType>? = null
+
+    /** Azit's book types (manga, manhwa, light novel...), for the search and the "Create in Azit" dialog. */
+    suspend fun bookTypes(): List<AzitMediaType> {
+        cachedBookTypes?.let { return it }
+        return AzitMapping.bookTypes(api.sections()).also { cachedBookTypes = it }
+    }
+
+    /** What Komikku knows about the manga, to be edited before creating the title in Azit. */
+    suspend fun createDraft(mangaId: Long): AzitTitleQuery {
+        val track = Track.create(id).apply {
+            manga_id = mangaId
+            title = getManga.await(mangaId)?.title.orEmpty()
+        }
+        return fullQuery(track)
+    }
+
+    /** Creates the title in Azit from the edited [draft] and binds the manga to it. */
+    suspend fun createFromDraft(mangaId: Long, draft: AzitTitleQuery) {
+        pendingDrafts[mangaId] = draft.copy(kind = AzitMapping.kindForType(draft.typeSlug, draft.kind))
+        val track = TrackSearch.create(id).apply {
+            remote_id = AzitMapping.CREATE_REMOTE_ID
+            manga_id = mangaId
+            title = draft.title
+            tracking_url = "${getServer()}/#create"
+        }
+        addTracks.bind(this, track, mangaId)
+    }
+
+    // ---- Migration from AniList ----
+
+    enum class MigrationOutcome { MIGRATED, CREATED, SKIPPED }
+
+    /**
+     * Binds the manga of [anilistTrack] to Azit (by its AniList id; Azit imports the title from AniList, or makes
+     * it from Komikku's data, when it is missing) and copies the AniList status, chapters, score and dates.
+     * The local Azit track is only saved once both calls worked, so a stopped migration resumes cleanly.
+     */
+    suspend fun migrateFromAnilist(anilistTrack: DomainTrack, unbindAnilist: Boolean): MigrationOutcome {
+        if (getTracks.await(anilistTrack.mangaId).any { it.trackerId == id }) return MigrationOutcome.SKIPPED
+        val track = Track.create(id).apply {
+            manga_id = anilistTrack.mangaId
+            title = anilistTrack.title
+        }
+        val bound = api.progress(AzitProgressWrite.from(query = fullQuery(track), createIfMissing = true))
+        val entry = api.progress(AzitMapping.migrationWrite(bound.mediaId, bound.title, anilistTrack))
+        track.copyEntry(entry)
+        track.toDomainTrack(idRequired = false)?.let { insertTrack.await(it) }
+        if (unbindAnilist) deleteTrack.await(anilistTrack.mangaId, anilistTrack.trackerId)
+        return if (bound.created) MigrationOutcome.CREATED else MigrationOutcome.MIGRATED
+    }
+
+    /** Library manga tracked on AniList and not yet on Azit. */
+    suspend fun anilistTracksToMigrate(): List<DomainTrack> {
+        return getTracks.await()
+            .groupBy { it.mangaId }
+            .values
+            .filter { tracks -> tracks.none { it.trackerId == id } }
+            .mapNotNull { tracks -> tracks.firstOrNull { it.trackerId == TrackerManager.ANILIST } }
+            .filter { getManga.await(it.mangaId)?.favorite == true }
+    }
 
     private fun errorMessage(code: Int): String = when (code) {
         401, 403 -> context.stringResource(KMR.strings.azit_error_token)
@@ -320,7 +441,4 @@ class Azit(id: Long) : BaseTracker(id, "Azit Tracker"), DeletableTracker {
         val source = sourceManager.get(manga.source) as? HttpSource ?: return null
         return runCatching { source.getMangaUrl(manga.toSManga()) }.getOrNull()
     }
-
-    /** Azit gives its own images as paths (`/api/images/...`). */
-    private fun absoluteUrl(url: String): String = if (url.startsWith("/")) "${getServer()}$url" else url
 }

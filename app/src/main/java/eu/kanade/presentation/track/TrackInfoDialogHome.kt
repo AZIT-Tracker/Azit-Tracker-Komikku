@@ -53,8 +53,10 @@ import androidx.compose.ui.unit.dp
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.presentation.components.DropdownMenu
 import eu.kanade.presentation.theme.TachiyomiPreviewTheme
+import eu.kanade.presentation.track.azit.AzitTrackExtras
 import eu.kanade.presentation.track.components.TrackLogoIcon
 import eu.kanade.tachiyomi.data.track.Tracker
+import eu.kanade.tachiyomi.data.track.azit.Azit
 import eu.kanade.tachiyomi.ui.manga.track.TrackItem
 import eu.kanade.tachiyomi.util.lang.toLocalDate
 import eu.kanade.tachiyomi.util.system.copyToClipboard
@@ -126,6 +128,9 @@ fun TrackInfoDialogHome(
                     onTogglePrivate = { onTogglePrivate(item) }
                         .takeIf { supportsPrivate },
                 )
+                // KMK -->
+                (item.tracker as? Azit)?.let { AzitTrackExtras(azit = it, track = item.track) }
+                // KMK <--
             } else {
                 TrackInfoItemEmpty(
                     tracker = item.tracker,

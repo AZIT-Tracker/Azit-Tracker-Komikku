@@ -1,13 +1,21 @@
 package eu.kanade.tachiyomi.data.track.azit
 
 import eu.kanade.tachiyomi.data.database.models.Track
+import eu.kanade.tachiyomi.data.track.anilist.Anilist
 import eu.kanade.tachiyomi.data.track.azit.dto.AzitEntry
+import eu.kanade.tachiyomi.data.track.azit.dto.AzitEntryFields
+import eu.kanade.tachiyomi.data.track.azit.dto.AzitMediaSummary
+import eu.kanade.tachiyomi.data.track.azit.dto.AzitMediaType
+import eu.kanade.tachiyomi.data.track.azit.dto.AzitProgressWrite
+import eu.kanade.tachiyomi.data.track.azit.dto.AzitSection
 import eu.kanade.tachiyomi.data.track.azit.dto.AzitTitleQuery
+import eu.kanade.tachiyomi.data.track.model.TrackSearch
 import eu.kanade.tachiyomi.source.model.SManga
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.math.roundToInt
+import tachiyomi.domain.track.model.Track as DomainTrack
 
 /** Conversions between Komikku's data and Azit Tracker's API (no Android or network: unit tested). */
 object AzitMapping {
@@ -98,6 +106,81 @@ object AzitMapping {
             .filter { it.isNotEmpty() }
             .distinct()
             .take(20)
+
+    /** 12.0 -> "12", 12.5 -> "12.5". */
+    fun formatNumber(value: Double): String =
+        if (value % 1.0 == 0.0) value.toLong().toString() else value.toString()
+
+    /** Azit media types a reader app deals with (searched, and offered when creating a title). */
+    val BOOK_TYPE_SLUGS = listOf("manga", "manhwa", "manhua", "webtoon", "comic", "novel", "light_novel", "web_novel")
+
+    /** The `kind` Azit expects for a media type. */
+    fun kindForType(typeSlug: String?, fallback: String = AzitTitleQuery.KIND_MANGA): String = when (typeSlug) {
+        "novel", "light_novel", "web_novel" -> AzitTitleQuery.KIND_NOVEL
+        "comic" -> "comic"
+        null -> fallback
+        else -> AzitTitleQuery.KIND_MANGA
+    }
+
+    /** Book type ids of Azit, in the order of [BOOK_TYPE_SLUGS]. */
+    fun bookTypes(sections: List<AzitSection>): List<AzitMediaType> =
+        sections.flatMap { it.mediaTypes }
+            .filter { it.slug in BOOK_TYPE_SLUGS }
+            .distinctBy { it.id }
+            .sortedBy { BOOK_TYPE_SLUGS.indexOf(it.slug) }
+
+    /** Azit gives its own images as paths (`/api/images/...`). */
+    fun absoluteUrl(url: String?, server: String): String? = when {
+        url.isNullOrBlank() -> null
+        url.startsWith("/") -> "$server$url"
+        else -> url
+    }
+
+    /** A title of Azit's catalogue as a search result (its summary is set by the caller). */
+    fun TrackSearch.copyFrom(media: AzitMediaSummary, server: String): TrackSearch = apply {
+        remote_id = media.id
+        title = media.title
+        cover_url = media.coverUrl.takeIf { media.hasCover }?.let { absoluteUrl(it, server) }.orEmpty()
+        publishing_type = listOfNotNull(media.mediaTypeName, media.format?.takeIf { it != media.mediaTypeName })
+            .joinToString(" · ")
+        publishing_status = media.releaseStatus.orEmpty()
+        start_date = media.startYear?.toString().orEmpty()
+        total_chapters = media.unitTotals["chapter"]?.toLong() ?: 0
+        last_chapter_read = media.entry?.progress?.get("chapter") ?: 0.0
+        status = fromAzitStatus(media.entry?.status) ?: PLAN_TO_READ
+        score = media.entry?.score?.toDouble() ?: 0.0
+        tracking_url = "$server/media/${media.id}"
+    }
+
+    // ---- Migration from AniList ----
+
+    /** AniList track status → Komikku status of the Azit tracker. */
+    fun fromAnilistStatus(status: Long): Long = when (status) {
+        Anilist.READING -> READING
+        Anilist.COMPLETED -> COMPLETED
+        Anilist.ON_HOLD -> ON_HOLD
+        Anilist.DROPPED -> DROPPED
+        Anilist.PLAN_TO_READ -> PLAN_TO_READ
+        Anilist.REREADING -> REREADING
+        else -> READING
+    }
+
+    /**
+     * Copies an AniList track (status, chapters read, score, start / finish dates) onto the bound Azit title.
+     * AniList keeps scores on 0-100 on the track, like Azit.
+     */
+    fun migrationWrite(mediaId: Long, title: String, anilist: DomainTrack, zone: ZoneId = ZoneId.systemDefault()) =
+        AzitProgressWrite.from(
+            query = AzitTitleQuery(mediaId = mediaId, title = title),
+            chapter = anilist.lastChapterRead,
+            status = toAzitStatus(fromAnilistStatus(anilist.status)),
+            onlyForward = false,
+            entryFields = AzitEntryFields(
+                score = toAzitScore(anilist.score),
+                startedOn = toAzitDate(anilist.startDate, zone),
+                finishedOn = toAzitDate(anilist.finishDate, zone),
+            ),
+        )
 
     /** Copies an Azit entry onto a Komikku track. */
     fun Track.copyFrom(entry: AzitEntry, server: String, zone: ZoneId = ZoneId.systemDefault()): Track = apply {

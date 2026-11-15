@@ -182,3 +182,57 @@ data class AzitMe(
     val ok: Boolean = false,
     val caller: String? = null,
 )
+
+/** `GET /api/sections`: the tabs of Azit, with their media types. */
+@Serializable
+data class AzitSection(
+    val id: Long,
+    val slug: String,
+    val name: String,
+    @SerialName("media_types")
+    val mediaTypes: List<AzitMediaType> = emptyList(),
+)
+
+@Serializable
+data class AzitMediaType(
+    val id: Long,
+    val slug: String,
+    val name: String,
+)
+
+/** `GET /api/media`: a page of titles. */
+@Serializable
+data class AzitMediaPage(
+    val items: List<AzitMediaSummary> = emptyList(),
+    val total: Int = 0,
+)
+
+@Serializable
+data class AzitMediaSummary(
+    val id: Long,
+    val title: String,
+    @SerialName("media_type_slug")
+    val mediaTypeSlug: String? = null,
+    @SerialName("media_type_name")
+    val mediaTypeName: String? = null,
+    val format: String? = null,
+    @SerialName("release_status")
+    val releaseStatus: String? = null,
+    @SerialName("start_year")
+    val startYear: Int? = null,
+    @SerialName("cover_url")
+    val coverUrl: String? = null,
+    /** False when [coverUrl] is only the type's placeholder. */
+    @SerialName("has_cover")
+    val hasCover: Boolean = true,
+    @SerialName("unit_totals")
+    val unitTotals: Map<String, Int?> = emptyMap(),
+    val entry: AzitEntrySummary? = null,
+)
+
+@Serializable
+data class AzitEntrySummary(
+    val status: String? = null,
+    val score: Int? = null,
+    val progress: Map<String, Double> = emptyMap(),
+)

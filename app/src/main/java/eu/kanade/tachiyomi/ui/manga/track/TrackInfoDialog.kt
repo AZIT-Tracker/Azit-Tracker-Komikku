@@ -53,11 +53,13 @@ import eu.kanade.presentation.track.TrackInfoDialogHome
 import eu.kanade.presentation.track.TrackScoreSelector
 import eu.kanade.presentation.track.TrackStatusSelector
 import eu.kanade.presentation.track.TrackerSearch
+import eu.kanade.presentation.track.azit.AzitCreateDialog
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.data.track.DeletableTracker
 import eu.kanade.tachiyomi.data.track.EnhancedTracker
 import eu.kanade.tachiyomi.data.track.Tracker
 import eu.kanade.tachiyomi.data.track.TrackerManager
+import eu.kanade.tachiyomi.data.track.azit.AzitMapping
 import eu.kanade.tachiyomi.data.track.model.TrackSearch
 import eu.kanade.tachiyomi.source.online.MetadataSource
 import eu.kanade.tachiyomi.source.online.all.MergedSource
@@ -807,6 +809,21 @@ data class TrackerSearchScreen(
         val state by screenModel.state.collectAsState()
 
         val textFieldState = rememberTextFieldState(initialQuery)
+        // KMK -->
+        val azit = remember { Injekt.get<TrackerManager>().azit.takeIf { it.id == serviceId } }
+        var showAzitCreate by remember { mutableStateOf(false) }
+        if (azit != null && showAzitCreate) {
+            AzitCreateDialog(
+                azit = azit,
+                mangaId = mangaId,
+                onDismissRequest = { showAzitCreate = false },
+                onCreated = {
+                    showAzitCreate = false
+                    navigator.pop()
+                },
+            )
+        }
+        // KMK <--
         TrackerSearch(
             state = textFieldState,
             onDispatchQuery = { screenModel.trackingSearch(textFieldState.text.toString()) },
@@ -815,6 +832,13 @@ data class TrackerSearchScreen(
             onSelectedChange = screenModel::updateSelection,
             onConfirmSelection = f@{ private: Boolean ->
                 val selected = state.selected ?: return@f
+                // KMK -->
+                // "Create in Azit": the fields are shown for editing first.
+                if (azit != null && selected.remote_id == AzitMapping.CREATE_REMOTE_ID) {
+                    showAzitCreate = true
+                    return@f
+                }
+                // KMK <--
                 selected.private = private
                 screenModel.registerTracking(selected)
                 navigator.pop()

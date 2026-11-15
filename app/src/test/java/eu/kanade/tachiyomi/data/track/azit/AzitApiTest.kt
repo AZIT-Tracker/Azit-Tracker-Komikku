@@ -180,6 +180,31 @@ class AzitApiTest {
     }
 
     @Test
+    fun `media search asks for book types with the device token`() = runBlocking<Unit> {
+        val page = api(body = """{"items": [{"id": 42, "title": "Solo Leveling"}], "total": 1}""")
+            .searchMedia("solo lev", listOf(3, 4, 7))
+
+        val request = requests.single()
+        request.method shouldBe "GET"
+        request.url.encodedPath shouldBe "/api/media"
+        request.url.queryParameter("search") shouldBe "solo lev"
+        request.url.queryParameter("media_type_ids") shouldBe "3,4,7"
+        request.url.queryParameter("per_page") shouldBe "20"
+        request.header("Authorization") shouldBe "Bearer $TOKEN"
+        page.items.single().id shouldBe 42
+    }
+
+    @Test
+    fun `a volume edit sends the volume`() = runBlocking<Unit> {
+        api(body = ENTRY).progress(
+            AzitProgressWrite.from(query = AzitTitleQuery(mediaId = 42, title = "x")).copy(volume = 3.0, onlyForward = false),
+        )
+
+        lastJson()["volume"]!!.jsonPrimitive.double shouldBe 3.0
+        lastJson().containsKey("chapter") shouldBe false
+    }
+
+    @Test
     fun `a refused token becomes a readable error`() {
         val error = assertThrows<AzitException> {
             runBlocking { api(code = 401, body = """{"detail":"no"}""").lookup(AzitTitleQuery(title = "x")) }

@@ -1,6 +1,7 @@
 package eu.kanade.presentation.more.settings.screen
 
 import android.content.Context
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,6 +16,7 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -50,6 +52,7 @@ import eu.kanade.tachiyomi.data.track.EnhancedTracker
 import eu.kanade.tachiyomi.data.track.Tracker
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.data.track.anilist.AnilistApi
+import eu.kanade.tachiyomi.data.track.azit.AzitMigrationJob
 import eu.kanade.tachiyomi.data.track.bangumi.BangumiApi
 import eu.kanade.tachiyomi.data.track.myanimelist.MyAnimeListApi
 import eu.kanade.tachiyomi.data.track.shikimori.ShikimoriApi
@@ -114,6 +117,11 @@ object SettingsTrackingScreen : SearchableSettings {
                         onDismissRequest = { dialog = null },
                     )
                 }
+                // KMK -->
+                is AzitMigrateDialog -> {
+                    AzitMigrateFromAnilistDialog(onDismissRequest = { dialog = null })
+                }
+                // KMK <--
             }
         }
 
@@ -223,6 +231,17 @@ object SettingsTrackingScreen : SearchableSettings {
                         preference = trackPreferences.azitCreateIfMissing(),
                         title = stringResource(KMR.strings.pref_azit_create_if_missing),
                         subtitle = stringResource(KMR.strings.pref_azit_create_if_missing_summary),
+                    ),
+                    Preference.PreferenceItem.TextPreference(
+                        title = stringResource(KMR.strings.azit_migrate_from_anilist),
+                        subtitle = stringResource(KMR.strings.azit_migrate_from_anilist_summary),
+                        onClick = {
+                            if (trackerManager.azit.isLoggedIn) {
+                                dialog = AzitMigrateDialog
+                            } else {
+                                context.toast(KMR.strings.azit_migrate_login_first)
+                            }
+                        },
                     ),
                 ),
             ),
@@ -421,3 +440,48 @@ private data class LoginDialog(
 private data class LogoutDialog(
     val tracker: Tracker,
 )
+
+// KMK -->
+private data object AzitMigrateDialog
+
+/** Confirms the AniList → Azit Tracker migration, and whether AniList is unlinked afterwards. */
+@Composable
+private fun AzitMigrateFromAnilistDialog(onDismissRequest: () -> Unit) {
+    val context = LocalContext.current
+    var unbindAnilist by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        title = { Text(text = stringResource(KMR.strings.azit_migrate_from_anilist)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(text = stringResource(KMR.strings.azit_migrate_explanation))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { unbindAnilist = !unbindAnilist },
+                ) {
+                    Checkbox(checked = unbindAnilist, onCheckedChange = { unbindAnilist = it })
+                    Text(text = stringResource(KMR.strings.azit_migrate_unbind_anilist))
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    AzitMigrationJob.start(context, unbindAnilist)
+                    context.toast(KMR.strings.azit_migration_started)
+                    onDismissRequest()
+                },
+            ) {
+                Text(text = stringResource(KMR.strings.azit_migrate_start))
+            }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismissRequest) {
+                Text(text = stringResource(MR.strings.action_cancel))
+            }
+        },
+    )
+}
+// KMK <--

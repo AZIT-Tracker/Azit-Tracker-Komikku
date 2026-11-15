@@ -3,7 +3,7 @@
 This fork of [Komikku](https://github.com/komikku-app/komikku) adds an **Azit Tracker** tracker. It records your
 reading in your own self-hosted Azit Tracker, the same way Komikku already updates AniList or MyAnimeList.
 
-- Branch: `azit-tracker`, pushed to `origin` (AZIT-Tracker/Azit-Tracker-Komikku). Upstream Komikku is the
+- Branch: `azit-tracker` (remote `origin` = AZIT-Tracker/Azit-Tracker-Komikku; you push it yourself). Upstream Komikku is the
   `upstream` remote: `git fetch upstream && git rebase upstream/master`.
 - Code: `app/src/main/java/eu/kanade/tachiyomi/data/track/azit/` (`Azit.kt` tracker, `AzitApi.kt` HTTP client,
   `AzitMapping.kt` conversions, `dto/` JSON models). Edits to existing Komikku files are wrapped in `// KMK -->` / `// KMK <--` markers.
@@ -47,11 +47,19 @@ log the phone out.
   time.
 - **On the first chapter read** of a library manga that has no Azit link yet: Azit finds the title (AniList id,
   page address, titles) or creates it.
-- **By hand:** tracking sheet → Azit Tracker. The search shows the matching Azit title (if any) and always
-  **Create in Azit: …**. That entry creates a new title from what Komikku has: title and alternative title, cover,
-  description, author/artist, genres, release status, total chapters when the series is finished, the source page
-  (labelled with the source name) and the AniList id. It is added to your library, even when a matching title
-  already exists.
+- **By hand:** tracking sheet → Azit Tracker. The search looks through Azit's books (manga, manhwa, manhua,
+  webtoon, comic, novels), shows their covers and says whether each one is in your library. The last result is
+  always **Create in Azit: …**. Choosing it opens a form filled with what Komikku has: title, alternative titles,
+  type (automatic or one of Azit's book types), cover URL, description, authors, genres, release status and total
+  chapters. You can edit any of them before creating. The new title also gets the source page (labelled with the
+  source name) and the AniList id, and it is added to your library, even when a matching title already exists.
+- **Mass migration from AniList:** Settings → Tracking → *Azit Tracker* → **Migrate from AniList**. Every library
+  manga with an AniList track and no Azit link is linked by its AniList id. Missing titles are imported from
+  AniList, or made from Komikku's data. Then the AniList status, chapters read, score and start/finish dates are
+  copied to Azit. You can choose to unlink AniList afterwards; that only removes the link in Komikku, nothing on
+  AniList. It runs in the background, one manga per second, with a progress notification and a summary
+  (migrated / created / failed, with the failed titles). Manga already linked to Azit are skipped, so running it
+  again resumes a stopped run.
 
 Once linked, the manga is tied to Azit's `media_id`: no more searching.
 
@@ -62,11 +70,17 @@ Once linked, the manga is tied to Azit's `media_id`: no more searching.
 | Reading a chapter / marking chapters read | `POST /api/tracking/progress` with `media_id`, `chapter` and `only_forward: true`, plus the chapter page `url` and the source name as `link_label`. Azit keeps the last page read on each site as the title's shortcut. |
 | Tracking sheet edits (status, chapters, score, start and finish dates) | `POST /api/tracking/progress` with `media_id` and `only_forward: false`. Score and dates are always sent; `null` clears them. |
 | Remove (tracking sheet → remove, with the option to also remove it from the tracker) | `DELETE /api/tracking/entry/{media_id}`: it leaves the library, the title stays in Azit |
+| Volumes (track card → Volumes) | `POST /api/tracking/progress` with `media_id`, `volume` and `only_forward: false` |
 | Refresh | `GET /api/tracking/entry/{media_id}` |
 
 Statuses: reading → `current`, completed → `completed`, on hold → `paused`, dropped → `dropped`, plan to read →
 `planning`, re-reading → `repeating`. Score: shown 0.0-10.0 like AniList's "10 point decimal", sent as 0-100.
 Dates: `YYYY-MM-DD`. When Azit knows the total chapters, reading the last one sets "completed".
+
+The Azit card in the tracking sheet also shows the cover Azit has (when there is one), the volumes read, and
+**Open in Azit** (`{server}/media/{media_id}`; tapping the logo does the same). Tapping the title searches again,
+to link the manga to another title. Komikku's track has no field for the cover or the volumes, so they are kept per
+title in Komikku's preferences and updated by every answer of the server.
 
 Settings (Settings → Tracking → *Azit Tracker* group):
 
@@ -84,8 +98,12 @@ delayed tracking job.
 - New API calls: add them to `AzitApi` and their models to `dto/AzitDto.kt`.
 - Tracker behaviour (what is sent when): `Azit.kt`. Conversions (status, score, dates, release status, kind) are in
   `AzitMapping.kt`. Both are unit tested in `app/src/test/java/eu/kanade/tachiyomi/data/track/azit/`.
+- Background migration: `AzitMigrationJob.kt` (WorkManager); the per-manga step is `Azit.migrateFromAnilist`.
+- UI: `app/src/main/java/eu/kanade/presentation/track/azit/` (`AzitTrackExtras` on the track card,
+  `AzitCreateDialog` for "Create in Azit").
 - Hooks in Komikku code (`// KMK` markers): `TrackChapter` (link on chapter read), `AddTracks` (link when AniList
-  is bound), `SettingsTrackingScreen` (login dialog and settings), `TrackerManager`, `TrackStatus`, `TrackPreferences`.
+  is bound), `TrackInfoDialog` (opens the create form), `TrackInfoDialogHome` (card extras),
+  `SettingsTrackingScreen` (login dialog, settings, migration), `TrackerManager`, `TrackStatus`, `TrackPreferences`.
 - Tracker id is `TrackerManager.AZIT = 100`. It is far from the upstream ids, so future upstream trackers won't
   collide with it.
 - Tests: `./gradlew :app:testDebugUnitTest --tests "*.azit.*"`

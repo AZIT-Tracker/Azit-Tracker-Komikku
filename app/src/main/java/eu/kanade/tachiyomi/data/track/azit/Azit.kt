@@ -2,24 +2,33 @@ package eu.kanade.tachiyomi.data.track.azit
 
 import android.app.Application
 import dev.icerock.moko.resources.StringResource
+import eu.kanade.domain.chapter.model.toSChapter
 import eu.kanade.domain.manga.model.toSManga
 import eu.kanade.domain.track.interactor.AddTracks
 import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.models.Track
 import eu.kanade.tachiyomi.data.track.BaseTracker
+import eu.kanade.tachiyomi.data.track.DeletableTracker
 import eu.kanade.tachiyomi.data.track.TrackerManager
-import eu.kanade.tachiyomi.data.track.azit.dto.AzitEntry
+import eu.kanade.tachiyomi.data.track.azit.AzitMapping.copyFrom
+import eu.kanade.tachiyomi.data.track.azit.dto.AzitEntryFields
 import eu.kanade.tachiyomi.data.track.azit.dto.AzitProgressWrite
 import eu.kanade.tachiyomi.data.track.azit.dto.AzitTitleQuery
 import eu.kanade.tachiyomi.data.track.model.TrackSearch
 import eu.kanade.tachiyomi.source.online.HttpSource
 import kotlinx.collections.immutable.ImmutableList
-import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import logcat.LogPriority
 import okhttp3.Dns
 import okhttp3.OkHttpClient
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.domain.chapter.interactor.GetChaptersByMangaId
 import tachiyomi.domain.manga.interactor.GetManga
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.source.service.SourceManager
@@ -33,50 +42,21 @@ import tachiyomi.domain.track.model.Track as DomainTrack
  * The owner's self-hosted Azit Tracker (see AZIT.md at the root of this repository).
  *
  * Login is a server address (saved as the "username") and a device token (saved as the "password").
- * The remote id is Azit's `media_id`. Azit finds the title itself from the AniList id, the page
- * address on the source and the titles, so every call sends all of them.
+ * The remote id is Azit's `media_id`: once bound, every call names the title by it (no search).
+ * Before that, Azit finds the title from the AniList id, the page address and the titles.
  */
-class Azit(id: Long) : BaseTracker(id, "Azit Tracker") {
+class Azit(id: Long) : BaseTracker(id, "Azit Tracker"), DeletableTracker {
 
     companion object {
-        const val READING = 1L
-        const val COMPLETED = 2L
-        const val ON_HOLD = 3L
-        const val DROPPED = 4L
-        const val PLAN_TO_READ = 5L
-        const val REREADING = 6L
+        const val READING = AzitMapping.READING
+        const val COMPLETED = AzitMapping.COMPLETED
+        const val ON_HOLD = AzitMapping.ON_HOLD
+        const val DROPPED = AzitMapping.DROPPED
+        const val PLAN_TO_READ = AzitMapping.PLAN_TO_READ
+        const val REREADING = AzitMapping.REREADING
 
-        /** Komikku status → Azit `EntryStatus`. */
-        fun toAzitStatus(status: Long): String? = when (status) {
-            READING -> "current"
-            COMPLETED -> "completed"
-            ON_HOLD -> "paused"
-            DROPPED -> "dropped"
-            PLAN_TO_READ -> "planning"
-            REREADING -> "repeating"
-            else -> null
-        }
-
-        /** Azit `EntryStatus` → Komikku status. */
-        fun fromAzitStatus(status: String?): Long? = when (status) {
-            "current" -> READING
-            "completed" -> COMPLETED
-            "paused" -> ON_HOLD
-            "dropped" -> DROPPED
-            "planning" -> PLAN_TO_READ
-            "repeating" -> REREADING
-            else -> null
-        }
-
-        /** Copies an Azit entry onto a Komikku track. */
-        fun Track.copyFrom(entry: AzitEntry, server: String): Track = apply {
-            remote_id = entry.mediaId
-            title = entry.title
-            last_chapter_read = entry.progress.chapter ?: 0.0
-            status = fromAzitStatus(entry.status) ?: PLAN_TO_READ
-            score = 0.0
-            tracking_url = "$server/media/${entry.mediaId}"
-        }
+        /** Pause between two titles when binding the library in the background (rate friendly). */
+        private const val BACKFILL_DELAY_MS = 750L
     }
 
     // A self-hosted server is often on the local network: DNS over HTTPS cannot resolve it.
@@ -85,14 +65,20 @@ class Azit(id: Long) : BaseTracker(id, "Azit Tracker") {
             .dns(Dns.SYSTEM)
             .build()
 
+    override val supportsReadingDates: Boolean = true
+
     private val context: Application by injectLazy()
 
     val api by lazy { AzitApi(client, ::getServer, ::getPassword, ::errorMessage) }
 
     private val getManga: GetManga by injectLazy()
     private val getTracks: GetTracks by injectLazy()
+    private val getChaptersByMangaId: GetChaptersByMangaId by injectLazy()
     private val sourceManager: SourceManager by injectLazy()
     private val addTracks: AddTracks by injectLazy()
+
+    /** Background work that outlives a screen (binding the library after login). */
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun getLogo(): Int = R.drawable.brand_azit
 
@@ -114,66 +100,101 @@ class Azit(id: Long) : BaseTracker(id, "Azit Tracker") {
 
     override fun getCompletionStatus(): Long = COMPLETED
 
-    // Scores are given in Azit itself (its own score format and detailed ratings).
-    override fun getScoreList(): ImmutableList<String> = persistentListOf()
+    // Like AniList's POINT_10_DECIMAL: shown 0.0-10.0, kept on the track (and in Azit) as 0-100.
+    override fun getScoreList(): ImmutableList<String> = AzitMapping.scoreList.toImmutableList()
 
-    override fun displayScore(track: DomainTrack): String = ""
+    override fun indexToScore(index: Int): Double = index.toDouble()
 
+    override fun get10PointScore(track: DomainTrack): Double = track.score / 10.0
+
+    override fun displayScore(track: DomainTrack): String = AzitMapping.displayScore(track.score)
+
+    override fun hasNotStartedReading(status: Long): Boolean = status == PLAN_TO_READ
+
+    /**
+     * A chapter read (`didReadChapter`): progress only moves forward, and the chapter page becomes the
+     * title's shortcut in Azit. Otherwise it is an edit from the tracking sheet: everything is sent as is.
+     */
     override suspend fun update(track: Track, didReadChapter: Boolean): Track {
+        if (track.remote_id <= 0) return bind(track)
         if (track.status != COMPLETED && didReadChapter) {
-            if (track.total_chapters > 0 && track.last_chapter_read.toLong() == track.total_chapters) {
+            if (track.total_chapters > 0 && track.last_chapter_read.toLong() >= track.total_chapters) {
                 track.status = COMPLETED
+                if (track.finished_reading_date == 0L) track.finished_reading_date = System.currentTimeMillis()
             } else if (track.status != REREADING) {
                 track.status = READING
             }
         }
-        val entry = api.progress(
+        val write = if (didReadChapter) {
+            val (url, label) = readingPage(track)
             AzitProgressWrite.from(
-                query = titleQuery(track),
+                query = boundQuery(track).copy(url = url, linkLabel = label),
                 chapter = track.last_chapter_read.takeIf { it > 0 },
-                status = toAzitStatus(track.status),
-                createIfMissing = createIfMissing(),
-            ),
-        )
-        return track.copyFrom(entry, getServer())
+                status = AzitMapping.toAzitStatus(track.status),
+            )
+        } else {
+            AzitProgressWrite.from(
+                query = boundQuery(track),
+                chapter = track.last_chapter_read,
+                status = AzitMapping.toAzitStatus(track.status),
+                onlyForward = false,
+                entryFields = AzitEntryFields(
+                    score = AzitMapping.toAzitScore(track.score),
+                    startedOn = AzitMapping.toAzitDate(track.started_reading_date),
+                    finishedOn = AzitMapping.toAzitDate(track.finished_reading_date),
+                ),
+            )
+        }
+        return track.copyFrom(api.progress(write), getServer())
     }
 
+    /**
+     * - the "Create in Azit" result: a new title made from Komikku's data, even if one matches;
+     * - a search result: that title (added to the library if needed);
+     * - otherwise (automatic binding): Azit finds the title, or creates it when "add missing titles" is on.
+     */
     override suspend fun bind(track: Track, hasReadChapters: Boolean): Track {
-        // No chapter: Azit only finds (or creates) the title. Komikku then sends the read chapters.
-        val entry = api.progress(
-            AzitProgressWrite.from(
-                query = titleQuery(track),
-                chapter = null,
-                status = null,
-                createIfMissing = createIfMissing(),
-            ),
-        )
-        return track.copyFrom(entry, getServer())
+        val write = when {
+            track.remote_id == AzitMapping.CREATE_REMOTE_ID ->
+                AzitProgressWrite.from(query = fullQuery(track), createIfMissing = true, forceCreate = true)
+            track.remote_id > 0 -> AzitProgressWrite.from(query = boundQuery(track))
+            else -> AzitProgressWrite.from(query = fullQuery(track), createIfMissing = createIfMissing())
+        }
+        return track.copyFrom(api.progress(write), getServer())
     }
 
     override suspend fun search(query: String): List<TrackSearch> {
-        val entry = api.lookup(AzitTitleQuery(title = query))
-        val result = TrackSearch.create(id)
-        if (entry != null) {
-            result.copyFrom(entry, getServer())
-            result.publishing_type = entry.type.orEmpty()
-            result.summary = entry.status
-                ?.let { context.stringResource(KMR.strings.azit_search_in_list, it) }
-                ?: context.stringResource(KMR.strings.azit_search_not_in_list)
-        } else {
-            // Not in Azit yet: binding it creates it there (when "create missing titles" is on).
-            result.remote_id = 0
-            result.title = query
-            result.tracking_url = getServer()
-            result.status = PLAN_TO_READ
-            result.summary = context.stringResource(KMR.strings.azit_search_will_be_created)
+        val results = mutableListOf<TrackSearch>()
+        api.lookup(AzitTitleQuery(title = query))?.let { entry ->
+            results += TrackSearch.create(id).apply {
+                copyFrom(entry, getServer())
+                cover_url = entry.coverUrl?.let(::absoluteUrl).orEmpty()
+                publishing_type = entry.type.orEmpty()
+                summary = entry.status
+                    ?.let { context.stringResource(KMR.strings.azit_search_in_list, it) }
+                    ?: context.stringResource(KMR.strings.azit_search_not_in_list)
+            }
         }
-        return listOf(result)
+        // Always offered, even when a title matches: it may be the wrong one.
+        results += TrackSearch.create(id).apply {
+            remote_id = AzitMapping.CREATE_REMOTE_ID
+            title = context.stringResource(KMR.strings.azit_create_in_azit, query)
+            tracking_url = "${getServer()}/#create"
+            status = PLAN_TO_READ
+            summary = context.stringResource(KMR.strings.azit_create_in_azit_summary)
+        }
+        return results
     }
 
     override suspend fun refresh(track: Track): Track {
-        val entry = api.lookup(titleQuery(track)) ?: return track
+        if (track.remote_id > 0) return track.copyFrom(api.entry(track.remote_id), getServer())
+        val entry = api.lookup(fullQuery(track)) ?: return track
         return track.copyFrom(entry, getServer())
+    }
+
+    /** "Remove from Azit": the entry leaves the library, the title stays in Azit's catalogue. */
+    override suspend fun delete(track: DomainTrack) {
+        if (track.remoteId > 0) api.removeEntry(track.remoteId)
     }
 
     override suspend fun login(username: String, password: String) {
@@ -181,9 +202,8 @@ class Azit(id: Long) : BaseTracker(id, "Azit Tracker") {
         val token = password.trim()
         api.checkLogin(server, token)
         saveCredentials(server, token)
+        scope.launch { bindLibraryFromAnilist() }
     }
-
-    override fun hasNotStartedReading(status: Long): Boolean = status == PLAN_TO_READ
 
     fun getServer(): String = getUsername()
 
@@ -195,15 +215,19 @@ class Azit(id: Long) : BaseTracker(id, "Azit Tracker") {
 
     private fun createIfMissing(): Boolean = trackPreferences.azitCreateIfMissing().get()
 
+    // ---- Automatic binding ----
+
     /**
-     * Binds a library manga to Azit the first time one of its chapters is read, so the reading is
-     * tracked without opening the tracking sheet. Called from [eu.kanade.domain.track.interactor.TrackChapter].
+     * Binds a manga to Azit without opening the tracking sheet. Called when a chapter of a library manga is
+     * read ([eu.kanade.domain.track.interactor.TrackChapter]) and when the manga gets an AniList track
+     * ([AddTracks], `requireFavorite = false`). The AniList id makes the match exact.
      */
-    suspend fun autoBind(mangaId: Long) {
+    suspend fun autoBind(mangaId: Long, requireFavorite: Boolean = true) {
         if (!isLoggedIn || !trackPreferences.azitAutoBind().get()) return
         try {
             if (getTracks.await(mangaId).any { it.trackerId == id }) return
-            val manga = getManga.await(mangaId)?.takeIf { it.favorite } ?: return
+            val manga = getManga.await(mangaId) ?: return
+            if (requireFavorite && !manga.favorite) return
             val track = TrackSearch.create(id).apply {
                 manga_id = mangaId
                 title = manga.title
@@ -215,27 +239,88 @@ class Azit(id: Long) : BaseTracker(id, "Azit Tracker") {
         }
     }
 
-    /** Everything Azit can use to find the title: the bound title, the manga's titles, AniList id and page. */
-    private suspend fun titleQuery(track: Track): AzitTitleQuery {
+    /** After login: library manga already tracked on AniList get bound to Azit too, one at a time. */
+    private suspend fun bindLibraryFromAnilist() {
+        if (!trackPreferences.azitAutoBind().get()) return
+        try {
+            val mangaIds = getTracks.await()
+                .groupBy { it.mangaId }
+                .filterValues { tracks ->
+                    tracks.any { it.trackerId == TrackerManager.ANILIST } && tracks.none { it.trackerId == id }
+                }
+                .keys
+            for (mangaId in mangaIds) {
+                if (!isLoggedIn) return
+                if (getManga.await(mangaId)?.favorite != true) continue
+                autoBind(mangaId, requireFavorite = true)
+                delay(BACKFILL_DELAY_MS)
+            }
+        } catch (e: Exception) {
+            logcat(LogPriority.WARN, e) { "Azit Tracker: could not bind the library" }
+        }
+    }
+
+    // ---- What is sent ----
+
+    /** A bound title: named by its `media_id`, the title is only there because the API requires one. */
+    private fun boundQuery(track: Track) = AzitTitleQuery(mediaId = track.remote_id, title = track.title)
+
+    /** Everything Komikku knows about the manga: to find the title in Azit, or to create it. */
+    private suspend fun fullQuery(track: Track): AzitTitleQuery {
         val manga = track.manga_id.takeIf { it > 0 }?.let { getManga.await(it) }
-        val titles = listOfNotNull(track.title, manga?.title, manga?.ogTitle)
+            ?: return AzitTitleQuery(title = track.title)
+        val source = sourceManager.get(manga.source)
+        val titles = listOf(manga.title, manga.ogTitle)
             .map { it.trim() }
             .filter { it.isNotEmpty() }
             .distinct()
-        val anilistId = manga?.let { m ->
-            getTracks.await(m.id).firstOrNull { it.trackerId == TrackerManager.ANILIST }?.remoteId
+        val anilistId = getTracks.await(manga.id)
+            .firstOrNull { it.trackerId == TrackerManager.ANILIST }
+            ?.remoteId
+            ?.takeIf { it > 0 }
+        val releaseStatus = AzitMapping.toReleaseStatus(manga.status)
+        val totalChapters = if (releaseStatus == "finished") {
+            getChaptersByMangaId.await(manga.id).maxOfOrNull { it.chapterNumber }?.toInt()?.takeIf { it > 0 }
+        } else {
+            null
         }
         return AzitTitleQuery(
             title = titles.firstOrNull() ?: track.title,
             altTitles = titles.drop(1),
-            anilistId = anilistId?.takeIf { it > 0 },
-            url = manga?.let { mangaUrl(it) },
-            kind = AzitTitleQuery.KIND_MANGA,
+            anilistId = anilistId,
+            url = mangaUrl(manga),
+            linkLabel = source?.name,
+            kind = AzitMapping.kindFor(manga.genre, source?.name),
+            coverUrl = manga.thumbnailUrl?.takeIf { it.startsWith("http") },
+            description = manga.description?.take(20_000),
+            authors = AzitMapping.authors(manga.author, manga.artist),
+            genres = manga.genre.orEmpty().map { it.trim() }.filter { it.isNotEmpty() }.distinct().take(50),
+            releaseStatus = releaseStatus,
+            totalChapters = totalChapters,
         )
+    }
+
+    /** The page of the chapter just read (the title's shortcut in Azit) and the source's name. */
+    private suspend fun readingPage(track: Track): Pair<String?, String?> {
+        return try {
+            val manga = getManga.await(track.manga_id) ?: return null to null
+            val source = sourceManager.get(manga.source) as? HttpSource ?: return null to null
+            val chapters = getChaptersByMangaId.await(manga.id).filter { it.chapterNumber == track.last_chapter_read }
+            val chapter = chapters.firstOrNull { it.read } ?: chapters.firstOrNull()
+            val url = chapter?.let { runCatching { source.getChapterUrl(it.toSChapter()) }.getOrNull() }
+                ?: mangaUrl(manga)
+            url to source.name
+        } catch (e: Exception) {
+            logcat(LogPriority.WARN, e) { "Azit Tracker: no reading page for ${track.title}" }
+            null to null
+        }
     }
 
     private fun mangaUrl(manga: Manga): String? {
         val source = sourceManager.get(manga.source) as? HttpSource ?: return null
         return runCatching { source.getMangaUrl(manga.toSManga()) }.getOrNull()
     }
+
+    /** Azit gives its own images as paths (`/api/images/...`). */
+    private fun absoluteUrl(url: String): String = if (url.startsWith("/")) "${getServer()}$url" else url
 }

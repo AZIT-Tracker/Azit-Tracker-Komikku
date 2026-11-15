@@ -12,6 +12,7 @@ import kotlinx.serialization.json.Json
 import okhttp3.Headers
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import tachiyomi.core.common.util.lang.withIOContext
 
@@ -53,13 +54,31 @@ class AzitApi(
         json.decodeFromString<AzitEntry?>(response)
     }
 
-    /** Finds (or creates) the title and moves its entry forward. */
+    /** Finds (or creates) the title and updates its entry (progress, status, score, dates). */
     suspend fun progress(write: AzitProgressWrite): AzitEntry = withIOContext {
-        val body = json.encodeToString(AzitProgressWrite.serializer(), write).toRequestBody(JSON_MEDIA_TYPE)
+        val body = write.toJson(json).toString().toRequestBody(JSON_MEDIA_TYPE)
         val response = execute {
             client.newCall(POST("${server()}$PROGRESS", headers(token()), body)).awaitSuccess()
         }
         json.decodeFromString<AzitEntry>(response)
+    }
+
+    /** The current state of a bound title. */
+    suspend fun entry(mediaId: Long): AzitEntry = withIOContext {
+        val response = execute { client.newCall(GET("${server()}$ENTRY/$mediaId", headers(token()))).awaitSuccess() }
+        json.decodeFromString<AzitEntry>(response)
+    }
+
+    /** Removes the title from the library (it stays in Azit's catalogue). */
+    suspend fun removeEntry(mediaId: Long) {
+        withIOContext {
+            val request = Request.Builder()
+                .url("${server()}$ENTRY/$mediaId")
+                .headers(headers(token()))
+                .delete()
+                .build()
+            execute { client.newCall(request).awaitSuccess() }
+        }
     }
 
     private fun headers(token: String): Headers = Headers.Builder()
@@ -71,7 +90,7 @@ class AzitApi(
         val response = try {
             call()
         } catch (e: HttpException) {
-            throw AzitException(errorMessage(e.code), e)
+            throw AzitException(errorMessage(e.code), e, e.code)
         }
         return response.use { it.body.string() }
     }
@@ -80,6 +99,7 @@ class AzitApi(
         const val ME = "/api/devices/me"
         const val LOOKUP = "/api/tracking/lookup"
         const val PROGRESS = "/api/tracking/progress"
+        const val ENTRY = "/api/tracking/entry"
 
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
 
@@ -92,10 +112,10 @@ class AzitApi(
 
         fun defaultErrorMessage(code: Int): String = when (code) {
             401, 403 -> "Azit Tracker: invalid or revoked device token"
-            404 -> "Azit Tracker: title not found, and adding missing titles is turned off"
+            404 -> "Azit Tracker: title not found (deleted in Azit, or adding missing titles is turned off)"
             else -> "Azit Tracker: HTTP error $code"
         }
     }
 }
 
-class AzitException(message: String, cause: Throwable? = null) : Exception(message, cause)
+class AzitException(message: String, cause: Throwable? = null, val code: Int? = null) : Exception(message, cause)

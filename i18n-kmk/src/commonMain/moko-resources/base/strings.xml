@@ -122,14 +122,15 @@
     <string name="azit_device_token">Device token (azd_…)</string>
     <string name="azit_settings_title">Azit Tracker</string>
     <string name="pref_azit_auto_bind">Track library manga automatically</string>
-    <string name="pref_azit_auto_bind_summary">Link a library manga to Azit Tracker the first time one of its chapters is read</string>
+    <string name="pref_azit_auto_bind_summary">Link a manga to Azit Tracker when it gets an AniList track, or when a chapter of a library manga is read</string>
     <string name="pref_azit_create_if_missing">Add missing titles to Azit</string>
     <string name="pref_azit_create_if_missing_summary">Create the title in Azit when it is not in the library yet</string>
     <string name="azit_search_in_list">In your Azit library (%s)</string>
     <string name="azit_search_not_in_list">In Azit, not in your list yet</string>
-    <string name="azit_search_will_be_created">Not in your Azit library yet: it will be added</string>
+    <string name="azit_create_in_azit">Create in Azit: %s</string>
+    <string name="azit_create_in_azit_summary">Creates a new title in Azit from what Komikku has (cover, description, authors, genres, status) and adds it to your library</string>
     <string name="azit_error_token">Azit Tracker: invalid or revoked device token</string>
-    <string name="azit_error_not_found">Azit Tracker: title not found, and adding missing titles is turned off</string>
+    <string name="azit_error_not_found">Azit Tracker: title not found (deleted in Azit, or adding missing titles is turned off)</string>
     <string name="azit_error_http">Azit Tracker: HTTP error %d</string>
     <!-- Sync section -->
     <string name="pref_show_restoring_progress_banner">Show restoring progress banner</string>

@@ -94,6 +94,13 @@ class AddTracks(
                     }
                 }
             // KMK <--
+
+            // KMK -->
+            // An AniList track ties the manga to an exact title: bind Azit Tracker to the same one.
+            if (tracker.id == TrackerManager.ANILIST) {
+                trackerManager.azit.autoBind(mangaId, requireFavorite = false)
+            }
+            // KMK <--
         }
     }
 

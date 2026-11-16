@@ -24,6 +24,14 @@ class DownloadPreferences(
         false,
     )
 
+    // KMK -->
+    /** Also delete when the tracker sync (opening a manga) marks chapters as read. Needs [removeAfterMarkedAsRead]. */
+    fun removeAfterAutoMarkedAsRead() = preferenceStore.getBoolean(
+        "pref_remove_after_auto_marked_as_read_key",
+        false,
+    )
+    // KMK <--
+
     fun removeBookmarkedChapters() = preferenceStore.getBoolean("pref_remove_bookmarked", false)
 
     fun removeExcludeCategories() = preferenceStore.getStringSet(REMOVE_EXCLUDE_CATEGORIES_PREF_KEY, emptySet())

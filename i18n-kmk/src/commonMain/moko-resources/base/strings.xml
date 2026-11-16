@@ -117,6 +117,11 @@
     <string name="pref_auto_sync_progress_from_trackers">Auto sync progress from Trackers</string>
     <string name="sync_progress_from_trackers_up_to_chapter">Sync progress from Trackers up to chapter %d</string>
     <string name="pref_track_on_add_library">Open track menu on adding to library</string>
+    <string name="pref_remove_after_auto_marked_as_read">After automatically marked as read</string>
+    <string name="pref_remove_after_auto_marked_as_read_summary">Also delete chapters that the tracker sync marks as read when a manga is opened</string>
+    <string name="pref_download_ahead_custom">Custom download ahead amount</string>
+    <string name="pref_download_ahead_custom_summary">Type any number of chapters to download ahead while reading</string>
+    <string name="pref_download_ahead_custom_range">1 to %d chapters</string>
     <!-- Azit Tracker -->
     <string name="azit_server_address">Server address (e.g. http://192.168.1.10:8080)</string>
     <string name="azit_device_token">Device token (azd_…)</string>

@@ -1,5 +1,10 @@
 package eu.kanade.presentation.more.settings.screen
 
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.collectAsState
@@ -8,12 +13,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.util.fastMap
 import eu.kanade.presentation.category.visualName
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.widget.TriStateListDialog
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableMap
 import tachiyomi.domain.category.interactor.GetCategories
 import tachiyomi.domain.category.model.Category
@@ -89,13 +96,24 @@ object SettingsDownloadScreen : SearchableSettings {
         downloadPreferences: DownloadPreferences,
         categories: List<Category>,
     ): Preference.PreferenceGroup {
+        // KMK -->
+        val removeAfterMarkedAsRead by downloadPreferences.removeAfterMarkedAsRead().collectAsState()
+        // KMK <--
         return Preference.PreferenceGroup(
             title = stringResource(MR.strings.pref_category_delete_chapters),
-            preferenceItems = persistentListOf(
+            preferenceItems = listOfNotNull(
                 Preference.PreferenceItem.SwitchPreference(
                     preference = downloadPreferences.removeAfterMarkedAsRead(),
                     title = stringResource(MR.strings.pref_remove_after_marked_as_read),
                 ),
+                // KMK -->
+                // Only shown when deleting after "marked as read" is on.
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = downloadPreferences.removeAfterAutoMarkedAsRead(),
+                    title = stringResource(KMR.strings.pref_remove_after_auto_marked_as_read),
+                    subtitle = stringResource(KMR.strings.pref_remove_after_auto_marked_as_read_summary),
+                ).takeIf { removeAfterMarkedAsRead },
+                // KMK <--
                 Preference.PreferenceItem.ListPreference(
                     preference = downloadPreferences.removeAfterReadSlots(),
                     entries = persistentMapOf(
@@ -116,7 +134,10 @@ object SettingsDownloadScreen : SearchableSettings {
                     downloadPreferences = downloadPreferences,
                     categories = { categories },
                 ),
-            ),
+            )
+                // KMK -->
+                .toImmutableList(),
+            // KMK <--
         )
     }
 
@@ -196,12 +217,36 @@ object SettingsDownloadScreen : SearchableSettings {
     private fun getDownloadAheadGroup(
         downloadPreferences: DownloadPreferences,
     ): Preference.PreferenceGroup {
+        // KMK -->
+        val downloadAheadPref = downloadPreferences.autoDownloadWhileReading()
+        val downloadAhead by downloadAheadPref.collectAsState()
+        var showCustomDownloadAhead by remember { mutableStateOf(false) }
+        if (showCustomDownloadAhead) {
+            CustomDownloadAheadDialog(
+                initial = downloadAhead,
+                onDismissRequest = { showCustomDownloadAhead = false },
+                onConfirm = {
+                    downloadAheadPref.set(it)
+                    showCustomDownloadAhead = false
+                },
+            )
+        }
+        // KMK <--
         return Preference.PreferenceGroup(
             title = stringResource(MR.strings.download_ahead),
             preferenceItems = persistentListOf(
                 Preference.PreferenceItem.ListPreference(
-                    preference = downloadPreferences.autoDownloadWhileReading(),
-                    entries = listOf(0, 2, 3, 5, 10)
+                    preference = downloadAheadPref,
+                    entries = (
+                        listOf(0, 2, 3, 5, 10) +
+                            // KMK -->
+                            listOf(25, 50) +
+                            // A custom amount stays selectable in the list.
+                            listOf(downloadAhead).filter { it > 0 }
+                        )
+                        .distinct()
+                        .sorted()
+                        // KMK <--
                         .associateWith {
                             if (it == 0) {
                                 stringResource(MR.strings.disabled)
@@ -212,6 +257,13 @@ object SettingsDownloadScreen : SearchableSettings {
                         .toImmutableMap(),
                     title = stringResource(MR.strings.auto_download_while_reading),
                 ),
+                // KMK -->
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(KMR.strings.pref_download_ahead_custom),
+                    subtitle = stringResource(KMR.strings.pref_download_ahead_custom_summary),
+                    onClick = { showCustomDownloadAhead = true },
+                ),
+                // KMK <--
                 Preference.PreferenceItem.InfoPreference(stringResource(MR.strings.download_ahead_info)),
             ),
         )
@@ -243,3 +295,42 @@ object SettingsDownloadScreen : SearchableSettings {
     }
     // KMK <--
 }
+
+// KMK -->
+/** Number of chapters to download ahead while reading, typed by hand (1-500). */
+@Composable
+private fun CustomDownloadAheadDialog(
+    initial: Int,
+    onDismissRequest: () -> Unit,
+    onConfirm: (Int) -> Unit,
+) {
+    var text by remember { mutableStateOf(initial.takeIf { it > 0 }?.toString().orEmpty()) }
+    val value = text.trim().toIntOrNull()?.takeIf { it in 1..MAX_DOWNLOAD_AHEAD }
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        title = { Text(text = stringResource(KMR.strings.pref_download_ahead_custom)) },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it.filter(Char::isDigit).take(3) },
+                singleLine = true,
+                isError = text.isNotBlank() && value == null,
+                supportingText = { Text(text = stringResource(KMR.strings.pref_download_ahead_custom_range, MAX_DOWNLOAD_AHEAD)) },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            )
+        },
+        confirmButton = {
+            TextButton(enabled = value != null, onClick = { value?.let(onConfirm) }) {
+                Text(text = stringResource(MR.strings.action_ok))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text(text = stringResource(MR.strings.action_cancel))
+            }
+        },
+    )
+}
+
+private const val MAX_DOWNLOAD_AHEAD = 500
+// KMK <--

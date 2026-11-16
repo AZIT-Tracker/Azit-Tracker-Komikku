@@ -1,5 +1,6 @@
 package eu.kanade.domain.track.interactor
 
+import eu.kanade.domain.download.interactor.DeleteDownload
 import eu.kanade.domain.track.model.toDbTrack
 import eu.kanade.tachiyomi.data.track.EnhancedTracker
 import eu.kanade.tachiyomi.data.track.Tracker
@@ -7,15 +8,25 @@ import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.chapter.interactor.GetChaptersByMangaId
 import tachiyomi.domain.chapter.interactor.UpdateChapter
+import tachiyomi.domain.chapter.model.Chapter
 import tachiyomi.domain.chapter.model.toChapterUpdate
+import tachiyomi.domain.download.service.DownloadPreferences
+import tachiyomi.domain.manga.interactor.GetManga
 import tachiyomi.domain.track.interactor.InsertTrack
 import tachiyomi.domain.track.model.Track
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import kotlin.math.max
 
 class SyncChapterProgressWithTrack(
     private val updateChapter: UpdateChapter,
     private val insertTrack: InsertTrack,
     private val getChaptersByMangaId: GetChaptersByMangaId,
+    // KMK -->
+    private val downloadPreferences: DownloadPreferences = Injekt.get(),
+    private val deleteDownload: DeleteDownload = Injekt.get(),
+    private val getManga: GetManga = Injekt.get(),
+    // KMK <--
 ) {
     /**
      * Sync chapter progress with the [EnhancedTracker]
@@ -61,13 +72,14 @@ class SyncChapterProgressWithTrack(
          * Some mangas has name such as Volume 2 Chapter 1 which will corrupt the order
          * if we sort by chapterNumber.
          */
-        val chapterUpdates = dbChapters
+        val chaptersToMarkRead = dbChapters
             .takeWhile { chapter ->
                 lastCheckChapter = checkingChapter
                 checkingChapter = chapter.chapterNumber
                 chapter.chapterNumber >= lastCheckChapter && chapter.chapterNumber <= remoteTrack.lastChapterRead
             }
             .filter { chapter -> !chapter.read }
+        val chapterUpdates = chaptersToMarkRead
             // KMK <--
             .map { it.copy(read = true).toChapterUpdate() }
 
@@ -90,6 +102,7 @@ class SyncChapterProgressWithTrack(
                 !tracker.hasNotStartedReading(remoteTrack.status)
             ) {
                 updateChapter.awaitAll(chapterUpdates)
+                deleteAutoMarkedRead(mangaId, chaptersToMarkRead)
                 return lastRead.toInt()
             }
             // KMK <--
@@ -100,4 +113,23 @@ class SyncChapterProgressWithTrack(
         return null
         // KMK <--
     }
+
+    // KMK -->
+    /**
+     * Chapters the tracker sync just marked as read are deleted like manually marked ones, when both
+     * "after manually marked as read" and "after automatically marked as read" are on. Excluded categories and
+     * bookmarked chapters are respected by the download manager, as for a manual deletion.
+     */
+    private suspend fun deleteAutoMarkedRead(mangaId: Long, chapters: List<Chapter>) {
+        if (chapters.isEmpty()) return
+        if (!downloadPreferences.removeAfterMarkedAsRead().get()) return
+        if (!downloadPreferences.removeAfterAutoMarkedAsRead().get()) return
+        try {
+            val manga = getManga.await(mangaId) ?: return
+            deleteDownload.awaitAll(manga, *chapters.map { it.copy(read = true) }.toTypedArray())
+        } catch (e: Exception) {
+            logcat(LogPriority.WARN, e) { "Could not delete chapters marked as read by the tracker sync" }
+        }
+    }
+    // KMK <--
 }

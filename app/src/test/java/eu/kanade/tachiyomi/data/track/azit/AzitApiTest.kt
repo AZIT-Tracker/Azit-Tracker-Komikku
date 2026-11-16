@@ -214,6 +214,15 @@ class AzitApiTest {
     }
 
     @Test
+    fun `paused device tracking gets a clear message`() {
+        val error = assertThrows<AzitException> {
+            runBlocking { api(code = 423, body = """{"detail":"paused"}""").progress(AzitProgressWrite(title = "x")) }
+        }
+        error.code shouldBe 423
+        error.message shouldBe "Tracking from devices is paused in Azit (Settings → Devices)"
+    }
+
+    @Test
     fun `checkLogin calls devices me`() = runBlocking<Unit> {
         api(body = """{"ok":true,"caller":"device:Phone"}""").checkLogin("http://other:8080", "azd_other")
 

@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -11,6 +12,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -27,10 +29,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import eu.kanade.tachiyomi.data.track.azit.Azit
+import eu.kanade.tachiyomi.data.track.azit.AzitCreateDraft
+import eu.kanade.tachiyomi.data.track.azit.AzitEntryPrefill
+import eu.kanade.tachiyomi.data.track.azit.AzitMapping
 import eu.kanade.tachiyomi.data.track.azit.dto.AzitMediaType
 import eu.kanade.tachiyomi.data.track.azit.dto.AzitTitleQuery
 import eu.kanade.tachiyomi.util.system.toast
 import logcat.LogPriority
+import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.core.common.util.lang.withUIContext
@@ -55,7 +61,7 @@ fun AzitCreateDialog(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var draft by remember { mutableStateOf<AzitTitleQuery?>(null) }
+    var draft by remember { mutableStateOf<AzitCreateDraft?>(null) }
     var types by remember { mutableStateOf<List<AzitMediaType>>(emptyList()) }
     var creating by remember { mutableStateOf(false) }
 
@@ -79,12 +85,18 @@ fun AzitCreateDialog(
             if (current == null) {
                 Box(modifier = Modifier.fillMaxWidth()) { CircularProgressIndicator() }
             } else {
-                AzitDraftFields(draft = current, types = types, onChange = { draft = it })
+                AzitDraftFields(
+                    full = current,
+                    types = types,
+                    statusName = { status -> azit.getStatus(status)?.let { context.stringResource(it) }.orEmpty() },
+                    statuses = azit.getStatusList(),
+                    onFullChange = { draft = it },
+                )
             }
         },
         confirmButton = {
             TextButton(
-                enabled = !creating && draft?.title?.isNotBlank() == true,
+                enabled = !creating && draft?.query?.title?.isNotBlank() == true,
                 onClick = {
                     val toCreate = draft ?: return@TextButton
                     creating = true
@@ -114,10 +126,16 @@ fun AzitCreateDialog(
 
 @Composable
 private fun AzitDraftFields(
-    draft: AzitTitleQuery,
+    full: AzitCreateDraft,
     types: List<AzitMediaType>,
-    onChange: (AzitTitleQuery) -> Unit,
+    statuses: List<Long>,
+    statusName: (Long) -> String,
+    onFullChange: (AzitCreateDraft) -> Unit,
 ) {
+    val draft = full.query
+    val onChange: (AzitTitleQuery) -> Unit = { onFullChange(full.copy(query = it)) }
+    val entry = full.entry
+    val onEntryChange: (AzitEntryPrefill) -> Unit = { onFullChange(full.copy(entry = it)) }
     Column(
         modifier = Modifier.verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -184,7 +202,80 @@ private fun AzitDraftFields(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth(),
         )
+
+        // The library entry: prefilled from the other trackers (AniList first), else Komikku's reading.
+        Text(
+            text = stringResource(KMR.strings.azit_create_entry_section),
+            style = MaterialTheme.typography.titleSmall,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        Choice(
+            label = stringResource(KMR.strings.azit_field_reading_status),
+            selected = statusName(entry.status),
+            options = statuses.map { it.toString() to statusName(it) },
+            onSelect = { value -> value?.toLongOrNull()?.let { onEntryChange(entry.copy(status = it)) } },
+        )
+        ParsedField(
+            initial = entry.chapter.takeIf { it > 0 }?.let(AzitMapping::formatNumber).orEmpty(),
+            label = stringResource(KMR.strings.azit_field_chapters_read),
+            keyboardType = KeyboardType.Decimal,
+            parse = { it.replace(',', '.').toDoubleOrNull()?.takeIf { value -> value >= 0 } },
+            onValue = { onEntryChange(entry.copy(chapter = it ?: 0.0)) },
+        )
+        ParsedField(
+            initial = entry.score.takeIf { it > 0 }?.let { AzitMapping.formatNumber(it / 10) }.orEmpty(),
+            label = stringResource(KMR.strings.azit_field_score),
+            keyboardType = KeyboardType.Decimal,
+            parse = { it.replace(',', '.').toDoubleOrNull()?.takeIf { value -> value in 0.0..10.0 } },
+            onValue = { onEntryChange(entry.copy(score = (it ?: 0.0) * 10)) },
+        )
+        ParsedField(
+            initial = AzitMapping.toAzitDate(entry.startDate).orEmpty(),
+            label = stringResource(KMR.strings.azit_field_started_on),
+            keyboardType = KeyboardType.Number,
+            parse = { AzitMapping.fromAzitDate(it).takeIf { millis -> millis > 0 } },
+            onValue = { onEntryChange(entry.copy(startDate = it ?: 0)) },
+        )
+        ParsedField(
+            initial = AzitMapping.toAzitDate(entry.finishDate).orEmpty(),
+            label = stringResource(KMR.strings.azit_field_finished_on),
+            keyboardType = KeyboardType.Number,
+            parse = { AzitMapping.fromAzitDate(it).takeIf { millis -> millis > 0 } },
+            onValue = { onEntryChange(entry.copy(finishDate = it ?: 0)) },
+        )
     }
+}
+
+/**
+ * A value typed as text: the text stays as typed; a blank field gives null, a field that doesn't parse is shown
+ * in error and keeps the last valid value.
+ */
+@Composable
+private fun <T : Any> ParsedField(
+    initial: String,
+    label: String,
+    keyboardType: KeyboardType,
+    parse: (String) -> T?,
+    onValue: (T?) -> Unit,
+) {
+    var text by remember { mutableStateOf(initial) }
+    val invalid = text.isNotBlank() && parse(text.trim()) == null
+    OutlinedTextField(
+        value = text,
+        onValueChange = {
+            text = it
+            if (it.isBlank()) {
+                onValue(null)
+            } else {
+                parse(it.trim())?.let(onValue)
+            }
+        },
+        label = { Text(text = label) },
+        isError = invalid,
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 /** A list edited as text ("a, b" or one per line): the text stays as typed, the list is parsed from it. */

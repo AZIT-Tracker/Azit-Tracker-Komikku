@@ -156,6 +156,13 @@
     <string name="azit_migration_not_found">Not found in Azit:</string>
     <string name="azit_migration_failed">Failed:</string>
     <string name="azit_error_not_in_azit">Azit Tracker: this title is not in Azit (use \"Create in Azit\")</string>
+    <string name="azit_error_paused">Tracking from devices is paused in Azit (Settings → Devices)</string>
+    <string name="azit_field_reading_status">Reading status</string>
+    <string name="azit_field_chapters_read">Chapters read</string>
+    <string name="azit_field_score">Score (0–10)</string>
+    <string name="azit_field_started_on">Started (YYYY-MM-DD)</string>
+    <string name="azit_field_finished_on">Finished (YYYY-MM-DD)</string>
+    <string name="azit_create_entry_section">Your entry</string>
     <string name="azit_error_token">Azit Tracker: invalid or revoked device token</string>
     <string name="azit_error_not_found">Azit Tracker: title not found (deleted in Azit, or adding missing titles is turned off)</string>
     <string name="azit_error_http">Azit Tracker: HTTP error %d</string>

@@ -11,6 +11,7 @@ import eu.kanade.tachiyomi.R
 import eu.kanade.tachiyomi.data.database.models.Track
 import eu.kanade.tachiyomi.data.track.BaseTracker
 import eu.kanade.tachiyomi.data.track.DeletableTracker
+import eu.kanade.tachiyomi.data.track.TrackStatus
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.data.track.azit.AzitMapping.copyFrom
 import eu.kanade.tachiyomi.data.track.azit.dto.AzitEntry
@@ -35,6 +36,7 @@ import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.chapter.interactor.GetChaptersByMangaId
+import tachiyomi.domain.history.interactor.GetHistory
 import tachiyomi.domain.manga.interactor.GetManga
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.source.service.SourceManager
@@ -43,6 +45,8 @@ import tachiyomi.domain.track.interactor.GetTracks
 import tachiyomi.domain.track.interactor.InsertTrack
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.kmk.KMR
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
 import java.util.concurrent.ConcurrentHashMap
 import tachiyomi.domain.track.model.Track as DomainTrack
@@ -83,6 +87,7 @@ class Azit(id: Long) : BaseTracker(id, "Azit Tracker"), DeletableTracker {
     private val getManga: GetManga by injectLazy()
     private val getTracks: GetTracks by injectLazy()
     private val getChaptersByMangaId: GetChaptersByMangaId by injectLazy()
+    private val getHistory: GetHistory by injectLazy()
     private val sourceManager: SourceManager by injectLazy()
     private val addTracks: AddTracks by injectLazy()
     private val insertTrack: InsertTrack by injectLazy()
@@ -170,13 +175,9 @@ class Azit(id: Long) : BaseTracker(id, "Azit Tracker"), DeletableTracker {
      */
     override suspend fun bind(track: Track, hasReadChapters: Boolean): Track {
         if (track.remote_id == AzitMapping.CREATE_REMOTE_ID) {
-            val write = AzitProgressWrite.from(
-                // The fields edited in the "Create in Azit" dialog, else Komikku's data as is.
-                query = pendingDrafts.remove(track.manga_id) ?: fullQuery(track),
-                createIfMissing = true,
-                forceCreate = true,
-            )
-            return track.copyEntry(api.progress(write))
+            // The fields edited in the "Create in Azit" dialog, else what Komikku knows as is.
+            val draft = pendingDrafts.remove(track.manga_id) ?: createDraft(track.manga_id)
+            return track.copyEntry(api.progress(draft.toWrite()))
         }
         val entry = linker.find(track.remote_id) { fullQuery(track) }
             ?: throw AzitException(context.stringResource(KMR.strings.azit_error_not_in_azit), code = 404)
@@ -267,7 +268,7 @@ class Azit(id: Long) : BaseTracker(id, "Azit Tracker"), DeletableTracker {
 
     // ---- "Create in Azit" with edited fields ----
 
-    private val pendingDrafts = ConcurrentHashMap<Long, AzitTitleQuery>()
+    private val pendingDrafts = ConcurrentHashMap<Long, AzitCreateDraft>()
 
     private var cachedBookTypes: List<AzitMediaType>? = null
 
@@ -277,22 +278,51 @@ class Azit(id: Long) : BaseTracker(id, "Azit Tracker"), DeletableTracker {
         return AzitMapping.bookTypes(api.sections()).also { cachedBookTypes = it }
     }
 
-    /** What Komikku knows about the manga, to be edited before creating the title in Azit. */
-    suspend fun createDraft(mangaId: Long): AzitTitleQuery {
+    /**
+     * What Komikku knows, to be edited before creating the title in Azit: the manga's details, and the entry
+     * from the other trackers of the manga (AniList first), else from Komikku's chapters and reading history.
+     */
+    suspend fun createDraft(mangaId: Long): AzitCreateDraft {
         val track = Track.create(id).apply {
             manga_id = mangaId
             title = getManga.await(mangaId)?.title.orEmpty()
         }
-        return fullQuery(track)
+        return AzitCreateDraft(query = fullQuery(track), entry = entryPrefill(mangaId))
     }
 
-    /** Creates the title in Azit from the edited [draft] and binds the manga to it. */
-    suspend fun createFromDraft(mangaId: Long, draft: AzitTitleQuery) {
-        pendingDrafts[mangaId] = draft.copy(kind = AzitMapping.kindForType(draft.typeSlug, draft.kind))
+    private suspend fun entryPrefill(mangaId: Long): AzitEntryPrefill {
+        val trackerManager = Injekt.get<TrackerManager>()
+        val sources = getTracks.await(mangaId)
+            .filter { it.trackerId != id }
+            .mapNotNull { other ->
+                val tracker = trackerManager.get(other.trackerId) ?: return@mapNotNull null
+                AzitPrefillSource(
+                    isAnilist = other.trackerId == TrackerManager.ANILIST,
+                    status = TrackStatus.parseTrackerStatus(trackerManager, other.trackerId, other.status),
+                    chapter = other.lastChapterRead,
+                    score10 = runCatching { tracker.get10PointScore(other) }.getOrDefault(0.0),
+                    startDate = other.startDate,
+                    finishDate = other.finishDate,
+                )
+            }
+        val chapters = getChaptersByMangaId.await(mangaId)
+        val readDates = getHistory.await(mangaId).mapNotNull { it.readAt?.time?.takeIf { time -> time > 0 } }
+        val local = AzitLocalReading(
+            lastReadChapter = chapters.filter { it.read }.maxOfOrNull { it.chapterNumber }?.takeIf { it > 0 } ?: 0.0,
+            allRead = chapters.isNotEmpty() && chapters.all { it.read },
+            firstReadAt = readDates.minOrNull() ?: 0,
+            lastReadAt = readDates.maxOrNull() ?: 0,
+        )
+        return AzitPrefill.entry(sources, local)
+    }
+
+    /** Creates the title in Azit from the edited [draft] (details and entry) and binds the manga to it. */
+    suspend fun createFromDraft(mangaId: Long, draft: AzitCreateDraft) {
+        pendingDrafts[mangaId] = draft
         val track = TrackSearch.create(id).apply {
             remote_id = AzitMapping.CREATE_REMOTE_ID
             manga_id = mangaId
-            title = draft.title
+            title = draft.query.title
             tracking_url = "${getServer()}/#create"
         }
         addTracks.bind(this, track, mangaId)
@@ -326,6 +356,7 @@ class Azit(id: Long) : BaseTracker(id, "Azit Tracker"), DeletableTracker {
     private fun errorMessage(code: Int): String = when (code) {
         401, 403 -> context.stringResource(KMR.strings.azit_error_token)
         404 -> context.stringResource(KMR.strings.azit_error_not_found)
+        423 -> context.stringResource(KMR.strings.azit_error_paused)
         else -> context.stringResource(KMR.strings.azit_error_http, code)
     }
 

@@ -134,6 +134,7 @@ class AzitApi(
 
         fun defaultErrorMessage(code: Int): String = when (code) {
             401, 403 -> "Azit Tracker: invalid or revoked device token"
+            423 -> "Tracking from devices is paused in Azit (Settings → Devices)"
             404 -> "Azit Tracker: title not found (deleted in Azit, or adding missing titles is turned off)"
             else -> "Azit Tracker: HTTP error $code"
         }

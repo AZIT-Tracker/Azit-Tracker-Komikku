@@ -54,10 +54,16 @@ Komikku usually pushes your local progress to a tracker right after binding it; 
   webtoon, comic, novels), shows their covers and says whether each one is in your library. Choosing one links
   to it.
 - **Create in Azit** (the last search result, always there): the only way a title gets created. A form filled with
-  what Komikku has opens first: title, alternative titles, type (automatic or one of Azit's book types), cover
-  URL, description, authors, genres, release status and total chapters. You can edit any of them. The new title
-  also gets the source page (labelled with the source name) and the AniList id, and it is added to your library
-  (status "planning"). Komikku's read chapters are not pushed; the next chapter you read is.
+  what Komikku knows opens first, and you can edit everything in it:
+  - the title: title, alternative titles, type (automatic or one of Azit's book types), cover URL, description,
+    authors, genres, release status and total chapters (from the manga);
+  - your entry: reading status, chapters read, score (0-10) and start / finish dates (`YYYY-MM-DD`). They come
+    from the other trackers of the manga, AniList first, then the others for what AniList lacks. Without a
+    tracker, they come from Komikku: chapters marked read, start = first chapter read in the history, finish =
+    last chapter read when every chapter is read.
+
+  The new title also gets the source page (labelled with the source name) and the AniList id. It is added to your
+  library with the entry as shown in the form; creating is a deliberate action, so these values are written.
 - **Migrate from AniList:** Settings → Tracking → *Azit Tracker* → **Migrate from AniList**. Every library manga
   with an AniList track and no Azit link is linked, as above, and nothing else is changed. You can choose to unlink
   AniList afterwards (only for manga that got linked); that only removes the link in Komikku, nothing on AniList.
@@ -90,6 +96,9 @@ Settings (Settings → Tracking → *Azit Tracker* group):
 
 - **Track library manga automatically** (on by default): turns on all the automatic linking above. Manga outside
   your library are only linked automatically when they get an AniList track.
+
+If Azit's **Pause tracking from devices** switch (Settings → Devices) is on, every write is refused (HTTP 423) and
+Komikku says "Tracking from devices is paused in Azit".
 
 Komikku's own settings still apply: **Update progress after reading** (from the reader) and **Update progress when
 marked as read** (from the manga screen). With **Auto sync progress from Trackers**, opening a manga can also

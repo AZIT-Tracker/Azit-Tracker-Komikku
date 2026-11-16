@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -24,10 +25,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import eu.kanade.presentation.manga.components.MangaCover
 import eu.kanade.tachiyomi.data.track.azit.Azit
 import eu.kanade.tachiyomi.data.track.azit.AzitCreateDraft
 import eu.kanade.tachiyomi.data.track.azit.AzitEntryPrefill
@@ -161,6 +164,14 @@ private fun AzitDraftFields(
                 types.map { it.slug to it.name },
             onSelect = { onChange(draft.copy(typeSlug = it)) },
         )
+        if (!draft.coverUrl.isNullOrBlank()) {
+            MangaCover.Book(
+                data = draft.coverUrl,
+                modifier = Modifier
+                    .height(160.dp)
+                    .align(Alignment.CenterHorizontally),
+            )
+        }
         OutlinedTextField(
             value = draft.coverUrl.orEmpty(),
             onValueChange = { onChange(draft.copy(coverUrl = it.ifBlank { null })) },

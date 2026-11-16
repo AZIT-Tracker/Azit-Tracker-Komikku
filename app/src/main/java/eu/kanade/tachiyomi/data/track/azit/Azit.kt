@@ -21,6 +21,7 @@ import eu.kanade.tachiyomi.data.track.azit.dto.AzitProgressWrite
 import eu.kanade.tachiyomi.data.track.azit.dto.AzitTitleQuery
 import eu.kanade.tachiyomi.data.track.model.TrackSearch
 import eu.kanade.tachiyomi.source.online.HttpSource
+import exh.util.mangaType
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineScope
@@ -287,7 +288,21 @@ class Azit(id: Long) : BaseTracker(id, "Azit Tracker"), DeletableTracker {
             manga_id = mangaId
             title = getManga.await(mangaId)?.title.orEmpty()
         }
-        return AzitCreateDraft(query = fullQuery(track), entry = entryPrefill(mangaId))
+        val query = fullQuery(track)
+        return AzitCreateDraft(query = query.copy(typeSlug = guessTypeSlug(mangaId)), entry = entryPrefill(mangaId))
+    }
+
+    /** Azit type of the manga (manhwa, webtoon, light novel...), when Azit has that type. */
+    private suspend fun guessTypeSlug(mangaId: Long): String? {
+        val manga = getManga.await(mangaId) ?: return null
+        val sourceName = sourceManager.get(manga.source)?.name
+        val available = try {
+            bookTypes().map { it.slug }
+        } catch (e: Exception) {
+            logcat(LogPriority.WARN, e) { "Azit Tracker: no media types, type left automatic" }
+            return null
+        }
+        return AzitMapping.guessTypeSlug(manga.genre, sourceName, manga.mangaType(sourceName), available)
     }
 
     private suspend fun entryPrefill(mangaId: Long): AzitEntryPrefill {

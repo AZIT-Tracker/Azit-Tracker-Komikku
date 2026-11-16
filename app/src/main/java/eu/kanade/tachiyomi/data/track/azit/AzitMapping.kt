@@ -8,6 +8,7 @@ import eu.kanade.tachiyomi.data.track.azit.dto.AzitSection
 import eu.kanade.tachiyomi.data.track.azit.dto.AzitTitleQuery
 import eu.kanade.tachiyomi.data.track.model.TrackSearch
 import eu.kanade.tachiyomi.source.model.SManga
+import exh.util.MangaType
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -116,6 +117,37 @@ object AzitMapping {
         "comic" -> "comic"
         null -> fallback
         else -> AzitTitleQuery.KIND_MANGA
+    }
+
+    /** Komikku's reading type (from genres and source, see `exh.util.mangaType`) → Azit type slug. */
+    fun typeSlugFor(type: MangaType): String = when (type) {
+        MangaType.TYPE_MANGA -> "manga"
+        MangaType.TYPE_MANHWA -> "manhwa"
+        MangaType.TYPE_MANHUA -> "manhua"
+        MangaType.TYPE_WEBTOON -> "webtoon"
+        MangaType.TYPE_COMIC -> "comic"
+    }
+
+    /**
+     * The Azit type of a manga for "Create in Azit": novels from the genres or the source name (light / web novel
+     * when said), else Komikku's own type guess. Null when Azit has no such type (the server then picks one).
+     */
+    fun guessTypeSlug(
+        genres: List<String>?,
+        sourceName: String?,
+        comicType: MangaType,
+        availableSlugs: Collection<String>,
+    ): String? {
+        val tags = genres.orEmpty()
+        val guess = when {
+            tags.any { it.contains("light novel", ignoreCase = true) } -> "light_novel"
+            tags.any { it.contains("web novel", ignoreCase = true) } -> "web_novel"
+            kindFor(genres, sourceName) == AzitTitleQuery.KIND_NOVEL -> "novel"
+            else -> typeSlugFor(comicType)
+        }
+        return guess.takeIf { it in availableSlugs }
+            // A light / web novel on a server with only "novel".
+            ?: "novel".takeIf { guess.endsWith("novel") && it in availableSlugs }
     }
 
     /** Book type ids of Azit, in the order of [BOOK_TYPE_SLUGS]. */

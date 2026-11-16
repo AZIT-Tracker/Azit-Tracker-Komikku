@@ -4,6 +4,7 @@ import eu.kanade.tachiyomi.data.track.azit.AzitMapping.copyFrom
 import eu.kanade.tachiyomi.data.track.azit.dto.AzitEntry
 import eu.kanade.tachiyomi.data.track.model.TrackSearch
 import eu.kanade.tachiyomi.source.model.SManga
+import exh.util.MangaType
 import io.kotest.matchers.shouldBe
 import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.Test
@@ -68,6 +69,27 @@ class AzitMappingTest {
         AzitMapping.kindFor(null, null) shouldBe "manga"
         AzitMapping.authors("Jane Doe, John Roe", "John Roe") shouldBe listOf("Jane Doe", "John Roe")
         AzitMapping.authors(null, " ") shouldBe emptyList()
+    }
+
+    @Test
+    fun `the type is guessed from genres, source and Komikku's reading type`() {
+        val all = AzitMapping.BOOK_TYPE_SLUGS
+        AzitMapping.guessTypeSlug(listOf("Action", "Light Novel"), "Some Source", MangaType.TYPE_MANGA, all) shouldBe
+            "light_novel"
+        AzitMapping.guessTypeSlug(listOf("Web Novel"), null, MangaType.TYPE_MANGA, all) shouldBe "web_novel"
+        AzitMapping.guessTypeSlug(listOf("Action"), "NovelBin", MangaType.TYPE_MANGA, all) shouldBe "novel"
+        AzitMapping.guessTypeSlug(listOf("Action"), "Toonily", MangaType.TYPE_MANHWA, all) shouldBe "manhwa"
+        AzitMapping.guessTypeSlug(listOf("Long Strip"), null, MangaType.TYPE_WEBTOON, all) shouldBe "webtoon"
+        AzitMapping.guessTypeSlug(emptyList(), null, MangaType.TYPE_MANHUA, all) shouldBe "manhua"
+        AzitMapping.guessTypeSlug(emptyList(), null, MangaType.TYPE_MANGA, all) shouldBe "manga"
+    }
+
+    @Test
+    fun `a type Azit doesn't have is left automatic`() {
+        val onlyManga = listOf("manga", "novel")
+        AzitMapping.guessTypeSlug(emptyList(), null, MangaType.TYPE_WEBTOON, onlyManga) shouldBe null
+        // A light novel falls back on "novel" when that is all Azit has.
+        AzitMapping.guessTypeSlug(listOf("Light Novel"), null, MangaType.TYPE_MANGA, onlyManga) shouldBe "novel"
     }
 
     @Test

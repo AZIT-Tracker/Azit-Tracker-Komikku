@@ -55,8 +55,10 @@ Komikku usually pushes your local progress to a tracker right after binding it; 
   to it.
 - **Create in Azit** (the last search result, always there): the only way a title gets created. A form filled with
   what Komikku knows opens first, and you can edit everything in it:
-  - the title: title, alternative titles, type (automatic or one of Azit's book types), cover URL, description,
-    authors, genres, release status and total chapters (from the manga);
+  - the title: title, alternative titles, type, cover URL (with a preview), description, authors, genres,
+    release status and total chapters (from the manga). The type is guessed like Komikku does for the reader
+    (genres and source: manga, manhwa, manhua, webtoon, comic); novels come from the genres or the source name
+    (light / web novel when said). It stays automatic when Azit has no such type;
   - your entry: reading status, chapters read, score (0-10) and start / finish dates (`YYYY-MM-DD`). They come
     from the other trackers of the manga, AniList first, then the others for what AniList lacks. Without a
     tracker, they come from Komikku: chapters marked read, start = first chapter read in the history, finish =

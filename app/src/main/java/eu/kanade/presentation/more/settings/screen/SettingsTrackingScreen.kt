@@ -227,11 +227,6 @@ object SettingsTrackingScreen : SearchableSettings {
                         title = stringResource(KMR.strings.pref_azit_auto_bind),
                         subtitle = stringResource(KMR.strings.pref_azit_auto_bind_summary),
                     ),
-                    Preference.PreferenceItem.SwitchPreference(
-                        preference = trackPreferences.azitCreateIfMissing(),
-                        title = stringResource(KMR.strings.pref_azit_create_if_missing),
-                        subtitle = stringResource(KMR.strings.pref_azit_create_if_missing_summary),
-                    ),
                     Preference.PreferenceItem.TextPreference(
                         title = stringResource(KMR.strings.azit_migrate_from_anilist),
                         subtitle = stringResource(KMR.strings.azit_migrate_from_anilist_summary),

@@ -40,26 +40,30 @@ log the phone out.
 
 ## Linking a manga
 
-- **Automatically from AniList:** when a manga gets an AniList track (or already has one), it is linked to Azit
-  too. Azit finds the title by its AniList id. If it isn't in Azit yet, Azit creates it from AniList (when **Add
-  missing titles to Azit** is on).
-- **After logging in:** library manga that are already tracked on AniList are linked in the background, one at a
-  time.
-- **On the first chapter read** of a library manga that has no Azit link yet: Azit finds the title (AniList id,
-  page address, titles) or creates it.
+**Linking only links.** It finds the Azit title and reads its state (status, chapters, score, dates) into
+Komikku's track. Nothing is written to Azit or AniList, and a title Azit doesn't have is skipped, never created.
+The requests are `POST /api/tracking/lookup` (a read-only search) or `GET /api/tracking/entry/{media_id}`.
+Komikku usually pushes your local progress to a tracker right after binding it; that step is skipped for Azit.
+
+- **Automatically from AniList:** when a manga gets an AniList track, it is linked to its Azit title, found by
+  AniList id, then page address, then titles.
+- **After logging in:** library manga already tracked on AniList are linked in the background, one at a time.
+- **On a chapter read** of a library manga with no Azit link yet: it is linked first. Then the chapter is sent,
+  like every chapter read (see below).
 - **By hand:** tracking sheet → Azit Tracker. The search looks through Azit's books (manga, manhwa, manhua,
-  webtoon, comic, novels), shows their covers and says whether each one is in your library. The last result is
-  always **Create in Azit: …**. Choosing it opens a form filled with what Komikku has: title, alternative titles,
-  type (automatic or one of Azit's book types), cover URL, description, authors, genres, release status and total
-  chapters. You can edit any of them before creating. The new title also gets the source page (labelled with the
-  source name) and the AniList id, and it is added to your library, even when a matching title already exists.
-- **Mass migration from AniList:** Settings → Tracking → *Azit Tracker* → **Migrate from AniList**. Every library
-  manga with an AniList track and no Azit link is linked by its AniList id. Missing titles are imported from
-  AniList, or made from Komikku's data. Then the AniList status, chapters read, score and start/finish dates are
-  copied to Azit. You can choose to unlink AniList afterwards; that only removes the link in Komikku, nothing on
-  AniList. It runs in the background, one manga per second, with a progress notification and a summary
-  (migrated / created / failed, with the failed titles). Manga already linked to Azit are skipped, so running it
-  again resumes a stopped run.
+  webtoon, comic, novels), shows their covers and says whether each one is in your library. Choosing one links
+  to it.
+- **Create in Azit** (the last search result, always there): the only way a title gets created. A form filled with
+  what Komikku has opens first: title, alternative titles, type (automatic or one of Azit's book types), cover
+  URL, description, authors, genres, release status and total chapters. You can edit any of them. The new title
+  also gets the source page (labelled with the source name) and the AniList id, and it is added to your library
+  (status "planning"). Komikku's read chapters are not pushed; the next chapter you read is.
+- **Migrate from AniList:** Settings → Tracking → *Azit Tracker* → **Migrate from AniList**. Every library manga
+  with an AniList track and no Azit link is linked, as above, and nothing else is changed. You can choose to unlink
+  AniList afterwards (only for manga that got linked); that only removes the link in Komikku, nothing on AniList.
+  It runs in the background, one manga per second, with a progress notification. The summary gives linked /
+  not found in Azit / failed, and the titles that were not found or failed. Manga already linked to Azit are
+  skipped, so running it again resumes a stopped run.
 
 Once linked, the manga is tied to Azit's `media_id`: no more searching.
 
@@ -67,7 +71,7 @@ Once linked, the manga is tied to Azit's `media_id`: no more searching.
 
 | Komikku | Azit |
 |---|---|
-| Reading a chapter / marking chapters read | `POST /api/tracking/progress` with `media_id`, `chapter` and `only_forward: true`, plus the chapter page `url` and the source name as `link_label`. Azit keeps the last page read on each site as the title's shortcut. |
+| Reading a chapter / marking chapters read (the only automatic write) | `POST /api/tracking/progress` with `media_id`, `chapter` and `only_forward: true`, plus the chapter page `url` and the source name as `link_label`. Azit keeps the last page read on each site as the title's shortcut. |
 | Tracking sheet edits (status, chapters, score, start and finish dates) | `POST /api/tracking/progress` with `media_id` and `only_forward: false`. Score and dates are always sent; `null` clears them. |
 | Remove (tracking sheet → remove, with the option to also remove it from the tracker) | `DELETE /api/tracking/entry/{media_id}`: it leaves the library, the title stays in Azit |
 | Volumes (track card → Volumes) | `POST /api/tracking/progress` with `media_id`, `volume` and `only_forward: false` |
@@ -86,11 +90,11 @@ Settings (Settings → Tracking → *Azit Tracker* group):
 
 - **Track library manga automatically** (on by default): turns on all the automatic linking above. Manga outside
   your library are only linked automatically when they get an AniList track.
-- **Add missing titles to Azit** (on by default): this is `create_if_missing` when linking automatically. "Create
-  in Azit" always creates.
 
 Komikku's own settings still apply: **Update progress after reading** (from the reader) and **Update progress when
-marked as read** (from the manga screen). A failed update (server unreachable) is retried later by Komikku's
+marked as read** (from the manga screen). With **Auto sync progress from Trackers**, opening a manga can also
+send Komikku's chapter count when it is ahead of Azit's (Azit's own status, score and dates are sent back
+unchanged). A failed update (server unreachable) is retried later by Komikku's
 delayed tracking job.
 
 ## Extending

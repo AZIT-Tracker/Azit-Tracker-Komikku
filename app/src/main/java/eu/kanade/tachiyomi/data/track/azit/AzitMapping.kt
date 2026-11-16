@@ -1,12 +1,9 @@
 package eu.kanade.tachiyomi.data.track.azit
 
 import eu.kanade.tachiyomi.data.database.models.Track
-import eu.kanade.tachiyomi.data.track.anilist.Anilist
 import eu.kanade.tachiyomi.data.track.azit.dto.AzitEntry
-import eu.kanade.tachiyomi.data.track.azit.dto.AzitEntryFields
 import eu.kanade.tachiyomi.data.track.azit.dto.AzitMediaSummary
 import eu.kanade.tachiyomi.data.track.azit.dto.AzitMediaType
-import eu.kanade.tachiyomi.data.track.azit.dto.AzitProgressWrite
 import eu.kanade.tachiyomi.data.track.azit.dto.AzitSection
 import eu.kanade.tachiyomi.data.track.azit.dto.AzitTitleQuery
 import eu.kanade.tachiyomi.data.track.model.TrackSearch
@@ -15,7 +12,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.math.roundToInt
-import tachiyomi.domain.track.model.Track as DomainTrack
 
 /** Conversions between Komikku's data and Azit Tracker's API (no Android or network: unit tested). */
 object AzitMapping {
@@ -151,36 +147,6 @@ object AzitMapping {
         score = media.entry?.score?.toDouble() ?: 0.0
         tracking_url = "$server/media/${media.id}"
     }
-
-    // ---- Migration from AniList ----
-
-    /** AniList track status → Komikku status of the Azit tracker. */
-    fun fromAnilistStatus(status: Long): Long = when (status) {
-        Anilist.READING -> READING
-        Anilist.COMPLETED -> COMPLETED
-        Anilist.ON_HOLD -> ON_HOLD
-        Anilist.DROPPED -> DROPPED
-        Anilist.PLAN_TO_READ -> PLAN_TO_READ
-        Anilist.REREADING -> REREADING
-        else -> READING
-    }
-
-    /**
-     * Copies an AniList track (status, chapters read, score, start / finish dates) onto the bound Azit title.
-     * AniList keeps scores on 0-100 on the track, like Azit.
-     */
-    fun migrationWrite(mediaId: Long, title: String, anilist: DomainTrack, zone: ZoneId = ZoneId.systemDefault()) =
-        AzitProgressWrite.from(
-            query = AzitTitleQuery(mediaId = mediaId, title = title),
-            chapter = anilist.lastChapterRead,
-            status = toAzitStatus(fromAnilistStatus(anilist.status)),
-            onlyForward = false,
-            entryFields = AzitEntryFields(
-                score = toAzitScore(anilist.score),
-                startedOn = toAzitDate(anilist.startDate, zone),
-                finishedOn = toAzitDate(anilist.finishDate, zone),
-            ),
-        )
 
     /** Copies an Azit entry onto a Komikku track. */
     fun Track.copyFrom(entry: AzitEntry, server: String, zone: ZoneId = ZoneId.systemDefault()): Track = apply {

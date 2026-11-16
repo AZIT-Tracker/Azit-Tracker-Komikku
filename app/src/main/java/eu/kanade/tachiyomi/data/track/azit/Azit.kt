@@ -143,12 +143,14 @@ class Azit(id: Long) : BaseTracker(id, "Azit Tracker"), DeletableTracker {
                 query = boundQuery(track).copy(url = url, linkLabel = label),
                 chapter = track.last_chapter_read.takeIf { it > 0 },
                 status = AzitMapping.toAzitStatus(track.status),
+                createIfMissing = false,
             )
         } else {
             AzitProgressWrite.from(
                 query = boundQuery(track),
                 chapter = track.last_chapter_read,
                 status = AzitMapping.toAzitStatus(track.status),
+                createIfMissing = false,
                 onlyForward = false,
                 entryFields = AzitEntryFields(
                     score = AzitMapping.toAzitScore(track.score),
@@ -161,23 +163,24 @@ class Azit(id: Long) : BaseTracker(id, "Azit Tracker"), DeletableTracker {
     }
 
     /**
-     * - the "Create in Azit" result: a new title made from Komikku's data, even if one matches;
-     * - a search result: that title (added to the library if needed);
-     * - otherwise (automatic binding): Azit finds the title, or creates it when "add missing titles" is on.
+     * Linking only: the Azit state is read into the track, nothing is written to Azit (see [AzitLinker]).
+     * Komikku's usual push of local progress after binding is skipped for Azit too (in [AddTracks]).
+     *
+     * The one exception is the "Create in Azit" result, which the user picks to create a new title.
      */
     override suspend fun bind(track: Track, hasReadChapters: Boolean): Track {
-        val write = when {
-            track.remote_id == AzitMapping.CREATE_REMOTE_ID ->
-                AzitProgressWrite.from(
-                    // The fields edited in the "Create in Azit" dialog, else Komikku's data as is.
-                    query = pendingDrafts.remove(track.manga_id) ?: fullQuery(track),
-                    createIfMissing = true,
-                    forceCreate = true,
-                )
-            track.remote_id > 0 -> AzitProgressWrite.from(query = boundQuery(track))
-            else -> AzitProgressWrite.from(query = fullQuery(track), createIfMissing = createIfMissing())
+        if (track.remote_id == AzitMapping.CREATE_REMOTE_ID) {
+            val write = AzitProgressWrite.from(
+                // The fields edited in the "Create in Azit" dialog, else Komikku's data as is.
+                query = pendingDrafts.remove(track.manga_id) ?: fullQuery(track),
+                createIfMissing = true,
+                forceCreate = true,
+            )
+            return track.copyEntry(api.progress(write))
         }
-        return track.copyEntry(api.progress(write))
+        val entry = linker.find(track.remote_id) { fullQuery(track) }
+            ?: throw AzitException(context.stringResource(KMR.strings.azit_error_not_in_azit), code = 404)
+        return track.copyEntry(entry)
     }
 
     /** Azit's catalogue (books only), with covers; "Create in Azit" is always the last result. */
@@ -297,25 +300,17 @@ class Azit(id: Long) : BaseTracker(id, "Azit Tracker"), DeletableTracker {
 
     // ---- Migration from AniList ----
 
-    enum class MigrationOutcome { MIGRATED, CREATED, SKIPPED }
-
     /**
-     * Binds the manga of [anilistTrack] to Azit (by its AniList id; Azit imports the title from AniList, or makes
-     * it from Komikku's data, when it is missing) and copies the AniList status, chapters, score and dates.
-     * The local Azit track is only saved once both calls worked, so a stopped migration resumes cleanly.
+     * "Migrate from AniList" for one manga: links it to its Azit title (found by AniList id and titles) and
+     * nothing else. No status, chapter, score or date is written to Azit or AniList, and a title Azit doesn't
+     * have is not created. AniList is unlinked in Komikku afterwards if asked, only when the link worked.
      */
-    suspend fun migrateFromAnilist(anilistTrack: DomainTrack, unbindAnilist: Boolean): MigrationOutcome {
-        if (getTracks.await(anilistTrack.mangaId).any { it.trackerId == id }) return MigrationOutcome.SKIPPED
-        val track = Track.create(id).apply {
-            manga_id = anilistTrack.mangaId
-            title = anilistTrack.title
+    suspend fun migrateFromAnilist(anilistTrack: DomainTrack, unbindAnilist: Boolean): AzitLinker.Outcome {
+        val outcome = linkManga(anilistTrack.mangaId)
+        if (outcome == AzitLinker.Outcome.LINKED && unbindAnilist) {
+            deleteTrack.await(anilistTrack.mangaId, anilistTrack.trackerId)
         }
-        val bound = api.progress(AzitProgressWrite.from(query = fullQuery(track), createIfMissing = true))
-        val entry = api.progress(AzitMapping.migrationWrite(bound.mediaId, bound.title, anilistTrack))
-        track.copyEntry(entry)
-        track.toDomainTrack(idRequired = false)?.let { insertTrack.await(it) }
-        if (unbindAnilist) deleteTrack.await(anilistTrack.mangaId, anilistTrack.trackerId)
-        return if (bound.created) MigrationOutcome.CREATED else MigrationOutcome.MIGRATED
+        return outcome
     }
 
     /** Library manga tracked on AniList and not yet on Azit. */
@@ -334,29 +329,42 @@ class Azit(id: Long) : BaseTracker(id, "Azit Tracker"), DeletableTracker {
         else -> context.stringResource(KMR.strings.azit_error_http, code)
     }
 
-    private fun createIfMissing(): Boolean = trackPreferences.azitCreateIfMissing().get()
-
     // ---- Automatic binding ----
 
+    private val linker by lazy { AzitLinker(api) }
+
     /**
-     * Binds a manga to Azit without opening the tracking sheet. Called when a chapter of a library manga is
+     * Links a manga to its Azit title (read only, see [AzitLinker]) and saves the Azit state as its local track.
+     * Komikku's chapters and AniList are left as they are.
+     */
+    suspend fun linkManga(mangaId: Long): AzitLinker.Outcome {
+        val manga = getManga.await(mangaId)
+        val track = Track.create(id).apply {
+            manga_id = mangaId
+            title = manga?.title.orEmpty()
+        }
+        return linker.link(
+            alreadyLinked = getTracks.await(mangaId).any { it.trackerId == id },
+            query = { fullQuery(track) },
+            save = { entry ->
+                track.copyEntry(entry)
+                track.toDomainTrack(idRequired = false)?.let { insertTrack.await(it) }
+            },
+        )
+    }
+
+    /**
+     * Links a manga to Azit without opening the tracking sheet. Called when a chapter of a library manga is
      * read ([eu.kanade.domain.track.interactor.TrackChapter]) and when the manga gets an AniList track
-     * ([AddTracks], `requireFavorite = false`). The AniList id makes the match exact.
+     * ([AddTracks], `requireFavorite = false`). A title Azit doesn't have is skipped.
      */
     suspend fun autoBind(mangaId: Long, requireFavorite: Boolean = true) {
         if (!isLoggedIn || !trackPreferences.azitAutoBind().get()) return
         try {
-            if (getTracks.await(mangaId).any { it.trackerId == id }) return
-            val manga = getManga.await(mangaId) ?: return
-            if (requireFavorite && !manga.favorite) return
-            val track = TrackSearch.create(id).apply {
-                manga_id = mangaId
-                title = manga.title
-                tracking_url = getServer()
-            }
-            addTracks.bind(this, track, mangaId)
+            if (requireFavorite && getManga.await(mangaId)?.favorite != true) return
+            linkManga(mangaId)
         } catch (e: Exception) {
-            logcat(LogPriority.WARN, e) { "Azit Tracker: could not bind manga $mangaId" }
+            logcat(LogPriority.WARN, e) { "Azit Tracker: could not link manga $mangaId" }
         }
     }
 
@@ -383,7 +391,7 @@ class Azit(id: Long) : BaseTracker(id, "Azit Tracker"), DeletableTracker {
 
     // ---- What is sent ----
 
-    /** A bound title: named by its `media_id`, the title is only there because the API requires one. */
+    /** A linked title: named by its `media_id`, the title is only there because the API requires one. */
     private fun boundQuery(track: Track) = AzitTitleQuery(mediaId = track.remote_id, title = track.title)
 
     /** Everything Komikku knows about the manga: to find the title in Azit, or to create it. */

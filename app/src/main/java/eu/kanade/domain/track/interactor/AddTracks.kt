@@ -7,6 +7,7 @@ import eu.kanade.tachiyomi.data.database.models.Track
 import eu.kanade.tachiyomi.data.track.EnhancedTracker
 import eu.kanade.tachiyomi.data.track.Tracker
 import eu.kanade.tachiyomi.data.track.TrackerManager
+import eu.kanade.tachiyomi.data.track.azit.Azit
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.util.lang.convertEpochMillisZone
 import eu.kanade.tachiyomi.util.system.toast
@@ -45,7 +46,7 @@ class AddTracks(
 
             // TODO: merge into [SyncChapterProgressWithTrack]?
             // Update chapter progress if newer chapters marked read locally
-            if (hasReadChapters) {
+            if (hasReadChapters /* KMK --> */ && tracker !is Azit /* KMK <-- */) {
                 val latestLocalReadChapterNumber = allChapters
                     .sortedBy { it.chapterNumber }
                     .takeWhile { it.read }

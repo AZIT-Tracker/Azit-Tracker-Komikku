@@ -28,11 +28,10 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
 /**
- * Moves the AniList tracking of the library to Azit Tracker, one manga after the other.
+ * Links every library manga tracked on AniList to its Azit title, one manga after the other.
  *
- * For each library manga with an AniList track and no Azit track: bind Azit by the AniList id (Azit imports the
- * title, or makes it from Komikku's data), then copy status, chapters, score and dates. Manga already on Azit are
- * skipped, so running it again resumes where a stopped run ended.
+ * Linking only (see [AzitLinker]): nothing is written to Azit or AniList, titles Azit doesn't have are listed as
+ * "not found" and not created. Manga already linked to Azit are skipped, so running it again resumes a stopped run.
  */
 class AzitMigrationJob(private val context: Context, workerParams: WorkerParameters) :
     CoroutineWorker(context, workerParams) {
@@ -55,7 +54,7 @@ class AzitMigrationJob(private val context: Context, workerParams: WorkerParamet
             if (isStopped) return@forEachIndexed
             context.notify(ID_PROGRESS, progressNotification(track.title, index, tracks.size).build())
             try {
-                summary.add(azit.migrateFromAnilist(track, unbindAnilist))
+                summary.add(azit.migrateFromAnilist(track, unbindAnilist), track.title)
             } catch (e: Exception) {
                 logcat(LogPriority.WARN, e) { "Azit migration failed for ${track.title}" }
                 summary.addFailure(track.title)
@@ -99,13 +98,23 @@ class AzitMigrationJob(private val context: Context, workerParams: WorkerParamet
             )
             val text = context.stringResource(
                 KMR.strings.azit_migration_summary,
-                summary.migrated,
-                summary.created,
+                summary.linked,
+                summary.notFound.size,
                 summary.failed.size,
             )
             setContentText(text)
-            val failed = summary.failed.takeIf { it.isNotEmpty() }?.joinToString("\n", prefix = "\n")
-            setStyle(NotificationCompat.BigTextStyle().bigText(text + failed.orEmpty()))
+            val details = buildString {
+                append(text)
+                if (summary.notFound.isNotEmpty()) {
+                    append("\n\n").append(context.stringResource(KMR.strings.azit_migration_not_found))
+                    summary.notFound.forEach { append("\n· ").append(it) }
+                }
+                if (summary.failed.isNotEmpty()) {
+                    append("\n\n").append(context.stringResource(KMR.strings.azit_migration_failed))
+                    summary.failed.forEach { append("\n· ").append(it) }
+                }
+            }
+            setStyle(NotificationCompat.BigTextStyle().bigText(details))
             setOngoing(false)
             setAutoCancel(true)
         }
@@ -115,7 +124,7 @@ class AzitMigrationJob(private val context: Context, workerParams: WorkerParamet
         private const val KEY_UNBIND_ANILIST = "unbind_anilist"
         private const val ID_PROGRESS = -0x7A17
 
-        /** Pause between two titles: the server is self-hosted, and AniList imports are rate limited. */
+        /** Pause between two titles: the server is self-hosted. */
         private const val DELAY_MS = 1_000L
 
         fun start(context: Context, unbindAnilist: Boolean) {
@@ -132,22 +141,18 @@ class AzitMigrationJob(private val context: Context, workerParams: WorkerParamet
 
 /** Counts of a migration run (shown in the final notification). */
 class AzitMigrationSummary {
-    var migrated = 0
-        private set
-    var created = 0
+    var linked = 0
         private set
     var skipped = 0
         private set
+    val notFound = mutableListOf<String>()
     val failed = mutableListOf<String>()
 
-    fun add(outcome: Azit.MigrationOutcome) {
+    fun add(outcome: AzitLinker.Outcome, title: String) {
         when (outcome) {
-            Azit.MigrationOutcome.MIGRATED -> migrated++
-            Azit.MigrationOutcome.CREATED -> {
-                migrated++
-                created++
-            }
-            Azit.MigrationOutcome.SKIPPED -> skipped++
+            AzitLinker.Outcome.LINKED -> linked++
+            AzitLinker.Outcome.NOT_FOUND -> notFound += title
+            AzitLinker.Outcome.ALREADY_LINKED -> skipped++
         }
     }
 

@@ -328,7 +328,12 @@ class ReaderViewModel @JvmOverloads constructor(
         chaptersForReader
             .sortedWith(getChapterSort(manga, sortDescending = false))
             .run {
-                if (readerPreferences.skipDupe().get()) {
+                if (
+                    readerPreferences.skipDupe().get() ||
+                    // Azit -->
+                    (readerPreferences.skipFiltered().get() && manga.hideDuplicateChapters)
+                    // Azit <--
+                ) {
                     removeDuplicates(selectedChapter)
                 } else {
                     this

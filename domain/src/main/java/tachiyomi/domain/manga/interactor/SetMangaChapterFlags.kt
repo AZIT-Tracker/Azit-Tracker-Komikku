@@ -35,6 +35,32 @@ class SetMangaChapterFlags(
         )
     }
 
+    // Azit -->
+    suspend fun awaitSetHideDuplicates(manga: Manga, hide: Boolean): Boolean {
+        return mangaRepository.update(
+            MangaUpdate(
+                id = manga.id,
+                chapterFlags = manga.chapterFlags.setFlag(
+                    if (hide) Manga.CHAPTER_HIDE_DUPLICATES else 0L,
+                    Manga.CHAPTER_HIDE_DUPLICATES,
+                ),
+            ),
+        )
+    }
+
+    suspend fun awaitSetDuplicatesKeepLast(manga: Manga, keepLast: Boolean): Boolean {
+        return mangaRepository.update(
+            MangaUpdate(
+                id = manga.id,
+                chapterFlags = manga.chapterFlags.setFlag(
+                    if (keepLast) Manga.CHAPTER_DUPLICATES_KEEP_LAST else 0L,
+                    Manga.CHAPTER_DUPLICATES_KEEP_LAST,
+                ),
+            ),
+        )
+    }
+    // Azit <--
+
     suspend fun awaitSetDisplayMode(manga: Manga, flag: Long): Boolean {
         return mangaRepository.update(
             MangaUpdate(

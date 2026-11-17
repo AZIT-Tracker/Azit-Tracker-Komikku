@@ -67,6 +67,7 @@ import eu.kanade.tachiyomi.ui.manga.RelatedManga.Companion.removeDuplicates
 import eu.kanade.tachiyomi.ui.manga.RelatedManga.Companion.sorted
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.util.chapter.getNextUnread
+import eu.kanade.tachiyomi.util.chapter.keepOneChapterEach
 import eu.kanade.tachiyomi.util.removeCovers
 import eu.kanade.tachiyomi.util.system.getBitmapOrNull
 import eu.kanade.tachiyomi.util.system.toast
@@ -1659,6 +1660,22 @@ class MangaScreenModel(
         }
     }
 
+    // Azit -->
+    fun setHideDuplicates(hide: Boolean) {
+        val manga = successState?.manga ?: return
+        screenModelScope.launchNonCancellable {
+            setMangaChapterFlags.awaitSetHideDuplicates(manga, hide)
+        }
+    }
+
+    fun setDuplicatesKeepLast(keepLast: Boolean) {
+        val manga = successState?.manga ?: return
+        screenModelScope.launchNonCancellable {
+            setMangaChapterFlags.awaitSetDuplicatesKeepLast(manga, keepLast)
+        }
+    }
+    // Azit <--
+
     /**
      * Sets the active display mode.
      * @param mode the mode to set.
@@ -2087,7 +2104,14 @@ class MangaScreenModel(
                 val unreadFilter = manga.unreadFilter
                 val downloadedFilter = manga.downloadedFilter
                 val bookmarkedFilter = manga.bookmarkedFilter
-                return asSequence()
+                // Azit -->: duplicates go first, so a filter can't bring back a copy that is hidden.
+                val chapters = if (manga.hideDuplicateChapters) {
+                    keepOneChapterEach(manga.duplicatesKeepLast) { it.chapter }
+                } else {
+                    this
+                }
+                return chapters.asSequence()
+                    // Azit <--
                     .filter { (chapter) -> applyFilter(unreadFilter) { !chapter.read } }
                     .filter { (chapter) -> applyFilter(bookmarkedFilter) { chapter.bookmark } }
                     .filter { applyFilter(downloadedFilter) { it.isDownloaded || isLocalManga } }

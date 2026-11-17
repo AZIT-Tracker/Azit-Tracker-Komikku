@@ -18,6 +18,7 @@ import eu.kanade.tachiyomi.data.download.model.Download
 import eu.kanade.tachiyomi.data.library.LibraryUpdateJob
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.util.lang.toLocalDate
+import eu.kanade.tachiyomi.util.chapter.keepOneChapterEach
 import exh.source.EH_SOURCE_ID
 import exh.source.EXH_SOURCE_ID
 import kotlinx.collections.immutable.PersistentList
@@ -45,6 +46,7 @@ import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.launchNonCancellable
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.chapter.interactor.GetChapter
+import tachiyomi.domain.chapter.interactor.GetChaptersByMangaId
 import tachiyomi.domain.chapter.interactor.UpdateChapter
 import tachiyomi.domain.chapter.model.ChapterUpdate
 import tachiyomi.domain.library.service.LibraryPreferences
@@ -67,6 +69,9 @@ class UpdatesScreenModel(
     private val getUpdates: GetUpdates = Injekt.get(),
     private val getManga: GetManga = Injekt.get(),
     private val getChapter: GetChapter = Injekt.get(),
+    // Azit -->
+    private val getChaptersByMangaId: GetChaptersByMangaId = Injekt.get(),
+    // Azit <--
     private val libraryPreferences: LibraryPreferences = Injekt.get(),
     private val updatesPreferences: UpdatesPreferences = Injekt.get(),
     val snackbarHostState: SnackbarHostState = SnackbarHostState(),
@@ -114,6 +119,9 @@ class UpdatesScreenModel(
                 },
             ) { updates, _, _, itemPreferences ->
                 updates
+                    // Azit -->
+                    .withoutHiddenDuplicates()
+                    // Azit <--
                     .toUpdateItems()
                     .applyFilters(itemPreferences)
                     .toPersistentList()
@@ -169,6 +177,24 @@ class UpdatesScreenModel(
             }
             .launchIn(screenModelScope)
     }
+
+    // Azit -->
+    /**
+     * Drops the chapters that series' chapter list hides with "Hide duplicate chapters": an update is shown only if
+     * the chapter is visible in the series' chapter list.
+     */
+    private suspend fun List<UpdatesWithRelations>.withoutHiddenDuplicates(): List<UpdatesWithRelations> {
+        val hidden = HashSet<Long>()
+        map { it.mangaId }.distinct().forEach { mangaId ->
+            val manga = getManga.await(mangaId) ?: return@forEach
+            if (!manga.hideDuplicateChapters) return@forEach
+            val chapters = getChaptersByMangaId.await(mangaId, applyFilter = true)
+            val visible = chapters.keepOneChapterEach(manga.duplicatesKeepLast) { it }.mapTo(HashSet()) { it.id }
+            chapters.forEach { if (it.id !in visible) hidden += it.id }
+        }
+        return if (hidden.isEmpty()) this else filterNot { it.chapterId in hidden }
+    }
+    // Azit <--
 
     private fun List<UpdatesItem>.applyFilters(
         preferences: ItemPreferences,

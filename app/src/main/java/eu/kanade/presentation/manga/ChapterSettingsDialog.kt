@@ -35,6 +35,8 @@ import kotlinx.collections.immutable.persistentListOf
 import tachiyomi.core.common.preference.TriState
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.kmk.KMR
+import tachiyomi.presentation.core.components.CheckboxItem
 import tachiyomi.presentation.core.components.LabeledCheckbox
 import tachiyomi.presentation.core.components.RadioItem
 import tachiyomi.presentation.core.components.SortItem
@@ -53,6 +55,10 @@ fun ChapterSettingsDialog(
     onBookmarkedFilterChanged: (TriState) -> Unit,
     scanlatorFilterActive: Boolean,
     onScanlatorFilterClicked: () -> Unit,
+    // Azit -->
+    onHideDuplicatesChanged: (Boolean) -> Unit,
+    onDuplicatesKeepLastChanged: (Boolean) -> Unit,
+    // Azit <--
     onSortModeChanged: (Long) -> Unit,
     onDisplayModeChanged: (Long) -> Unit,
     onSetAsDefault: (applyToExistingManga: Boolean) -> Unit,
@@ -109,6 +115,12 @@ fun ChapterSettingsDialog(
                         onBookmarkedFilterChanged = onBookmarkedFilterChanged,
                         scanlatorFilterActive = scanlatorFilterActive,
                         onScanlatorFilterClicked = onScanlatorFilterClicked,
+                        // Azit -->
+                        hideDuplicates = manga?.hideDuplicateChapters ?: false,
+                        onHideDuplicatesChanged = onHideDuplicatesChanged,
+                        duplicatesKeepLast = manga?.duplicatesKeepLast ?: false,
+                        onDuplicatesKeepLastChanged = onDuplicatesKeepLastChanged,
+                        // Azit <--
                     )
                 }
                 1 -> {
@@ -139,6 +151,12 @@ private fun ColumnScope.FilterPage(
     onBookmarkedFilterChanged: (TriState) -> Unit,
     scanlatorFilterActive: Boolean,
     onScanlatorFilterClicked: () -> Unit,
+    // Azit -->
+    hideDuplicates: Boolean,
+    onHideDuplicatesChanged: (Boolean) -> Unit,
+    duplicatesKeepLast: Boolean,
+    onDuplicatesKeepLastChanged: (Boolean) -> Unit,
+    // Azit <--
 ) {
     TriStateItem(
         label = stringResource(MR.strings.label_downloaded),
@@ -155,6 +173,25 @@ private fun ColumnScope.FilterPage(
         state = bookmarkedFilter,
         onClick = onBookmarkedFilterChanged,
     )
+    // Azit -->
+    CheckboxItem(
+        label = stringResource(KMR.strings.action_filter_hide_duplicate_chapters),
+        checked = hideDuplicates,
+        onClick = { onHideDuplicatesChanged(!hideDuplicates) },
+    )
+    if (hideDuplicates) {
+        RadioItem(
+            label = stringResource(KMR.strings.action_duplicates_keep_first),
+            selected = !duplicatesKeepLast,
+            onClick = { onDuplicatesKeepLastChanged(false) },
+        )
+        RadioItem(
+            label = stringResource(KMR.strings.action_duplicates_keep_last),
+            selected = duplicatesKeepLast,
+            onClick = { onDuplicatesKeepLastChanged(true) },
+        )
+    }
+    // Azit <--
     ScanlatorFilterItem(
         active = scanlatorFilterActive,
         onClick = onScanlatorFilterClicked,

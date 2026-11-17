@@ -531,6 +531,10 @@ class MangaScreen(
                 onResetToDefault = screenModel::resetToDefaultSettings,
                 scanlatorFilterActive = successState.scanlatorFilterActive,
                 onScanlatorFilterClicked = { showScanlatorsDialog = true },
+                // Azit -->
+                onHideDuplicatesChanged = screenModel::setHideDuplicates,
+                onDuplicatesKeepLastChanged = screenModel::setDuplicatesKeepLast,
+                // Azit <--
             )
             MangaScreenModel.Dialog.TrackSheet -> {
                 NavigatorAdaptiveSheet(

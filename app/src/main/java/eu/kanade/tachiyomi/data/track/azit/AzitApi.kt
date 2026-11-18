@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.data.track.azit
 
+import eu.kanade.tachiyomi.data.track.azit.dto.AzitDuplicates
 import eu.kanade.tachiyomi.data.track.azit.dto.AzitEntry
 import eu.kanade.tachiyomi.data.track.azit.dto.AzitMe
 import eu.kanade.tachiyomi.data.track.azit.dto.AzitMediaPage
@@ -11,6 +12,14 @@ import eu.kanade.tachiyomi.network.HttpException
 import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.network.awaitSuccess
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
@@ -57,6 +66,17 @@ class AzitApi(
         json.decodeFromString<AzitEntry?>(response)
     }
 
+    // KMK -->
+    /** Titles already in Azit with this AniList id / page, or one of these names: shown before creating one. */
+    suspend fun duplicates(query: AzitTitleQuery): AzitDuplicates = withIOContext {
+        val body = json.encodeToString(AzitTitleQuery.serializer(), query).toRequestBody(JSON_MEDIA_TYPE)
+        val response = execute {
+            client.newCall(POST("${server()}$DUPLICATES", headers(token()), body)).awaitSuccess()
+        }
+        json.decodeFromString<AzitDuplicates>(response)
+    }
+    // KMK <--
+
     /** Finds (or creates) the title and updates its entry (progress, status, score, dates). */
     suspend fun progress(write: AzitProgressWrite): AzitEntry = withIOContext {
         val body = write.toJson(json).toString().toRequestBody(JSON_MEDIA_TYPE)
@@ -64,6 +84,31 @@ class AzitApi(
             client.newCall(POST("${server()}$PROGRESS", headers(token()), body)).awaitSuccess()
         }
         json.decodeFromString<AzitEntry>(response)
+    }
+
+    /**
+     * Several updates in one request (what waited while Azit could not be reached): one result per update, in the
+     * same order, each an entry or the reason it was refused.
+     */
+    suspend fun progressBatch(writes: List<AzitProgressWrite>): List<Result<AzitEntry>> = withIOContext {
+        val body = JsonObject(mapOf("updates" to JsonArray(writes.map { it.toJson(json) }))).toString().toRequestBody(JSON_MEDIA_TYPE)
+        val response = execute {
+            client.newCall(POST("${server()}$PROGRESS_BATCH", headers(token()), body)).awaitSuccess()
+        }
+        json.parseToJsonElement(response).jsonObject["results"]!!.jsonArray.map { item ->
+            val result = item.jsonObject
+            if (result["ok"]?.jsonPrimitive?.booleanOrNull == true) {
+                Result.success(json.decodeFromJsonElement(AzitEntry.serializer(), result["entry"]!!))
+            } else {
+                Result.failure(
+                    AzitException(
+                        result["error"]?.jsonPrimitive?.contentOrNull ?: "Refused by Azit",
+                        null,
+                        result["status"]?.jsonPrimitive?.intOrNull ?: 0,
+                    ),
+                )
+            }
+        }
     }
 
     /** Titles of the given types matching [query], with their covers (private ones too, with a device token). */
@@ -119,6 +164,11 @@ class AzitApi(
         const val ME = "/api/devices/me"
         const val LOOKUP = "/api/tracking/lookup"
         const val PROGRESS = "/api/tracking/progress"
+        const val PROGRESS_BATCH = "/api/tracking/progress/batch"
+
+        // KMK -->
+        const val DUPLICATES = "/api/tracking/duplicates"
+        // KMK <--
         const val ENTRY = "/api/tracking/entry"
         const val MEDIA = "/api/media"
         const val SECTIONS = "/api/sections"

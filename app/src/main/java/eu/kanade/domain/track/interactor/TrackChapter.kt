@@ -4,6 +4,7 @@ import android.content.Context
 import eu.kanade.domain.track.model.toDbTrack
 import eu.kanade.domain.track.model.toDomainTrack
 import eu.kanade.domain.track.service.DelayedTrackingUpdateJob
+import eu.kanade.domain.track.service.TrackingQueue
 import eu.kanade.domain.track.store.DelayedTrackingStore
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.data.track.mdlist.MdList
@@ -57,8 +58,14 @@ class TrackChapter(
                             service.update(updatedTrack.toDbTrack(), true)
                             insertTrack.await(updatedTrack)
                             delayedTrackingStore.remove(track.id)
+                            // KMK -->
+                            TrackingQueue.onSuccess(track.trackerId) // it answers again: send what it missed
+                            // KMK <--
                         } catch (e: Exception) {
                             delayedTrackingStore.add(track.id, chapterNumber)
+                            // KMK -->
+                            delayedTrackingStore.recordFailure(track.id, e.message ?: e::class.simpleName)
+                            // KMK <--
                             if (setupJobOnFailure) {
                                 DelayedTrackingUpdateJob.setupTask(context)
                             }

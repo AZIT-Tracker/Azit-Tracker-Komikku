@@ -14,6 +14,7 @@ import eu.kanade.tachiyomi.data.track.DeletableTracker
 import eu.kanade.tachiyomi.data.track.TrackStatus
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.data.track.azit.AzitMapping.copyFrom
+import eu.kanade.tachiyomi.data.track.azit.dto.AzitDuplicates
 import eu.kanade.tachiyomi.data.track.azit.dto.AzitEntry
 import eu.kanade.tachiyomi.data.track.azit.dto.AzitEntryFields
 import eu.kanade.tachiyomi.data.track.azit.dto.AzitMediaType
@@ -135,6 +136,9 @@ class Azit(id: Long) : BaseTracker(id, "Azit Tracker"), DeletableTracker {
      */
     override suspend fun update(track: Track, didReadChapter: Boolean): Track {
         if (track.remote_id <= 0) return bind(track)
+        // KMK -->
+        if (didReadChapter) return track.copyEntry(api.progress(chapterWrite(track)))
+        // KMK <--
         if (track.status != COMPLETED && didReadChapter) {
             if (track.total_chapters > 0 && track.last_chapter_read.toLong() >= track.total_chapters) {
                 track.status = COMPLETED
@@ -167,6 +171,39 @@ class Azit(id: Long) : BaseTracker(id, "Azit Tracker"), DeletableTracker {
         }
         return track.copyEntry(api.progress(write))
     }
+
+    // KMK -->
+    /** A chapter read: progress only moves forward, the status follows, and the chapter page becomes the shortcut. */
+    private suspend fun chapterWrite(track: Track): AzitProgressWrite {
+        if (track.status != COMPLETED) {
+            if (track.total_chapters > 0 && track.last_chapter_read.toLong() >= track.total_chapters) {
+                track.status = COMPLETED
+                if (track.finished_reading_date == 0L) track.finished_reading_date = System.currentTimeMillis()
+            } else if (track.status != REREADING) {
+                track.status = READING
+            }
+        }
+        val (url, label) = readingPage(track)
+        return AzitProgressWrite.from(
+            query = boundQuery(track).copy(url = url, linkLabel = label),
+            chapter = track.last_chapter_read.takeIf { it > 0 },
+            status = AzitMapping.toAzitStatus(track.status),
+            createIfMissing = false,
+        )
+    }
+
+    /**
+     * Chapters read while Azit could not be reached, all in one request ([TrackingQueue]): one result per track, in
+     * the same order (the updated track, or why Azit refused it).
+     */
+    suspend fun updateMany(tracks: List<Track>): List<Result<Track>> {
+        val bound = tracks.filter { it.remote_id > 0 }
+        val answers = api.progressBatch(bound.map { chapterWrite(it) }).iterator()
+        return tracks.map { track ->
+            if (track.remote_id <= 0) runCatching { bind(track) } else answers.next().map { track.copyEntry(it) }
+        }
+    }
+    // KMK <--
 
     /**
      * Linking only: the Azit state is read into the track, nothing is written to Azit (see [AzitLinker]).
@@ -342,6 +379,38 @@ class Azit(id: Long) : BaseTracker(id, "Azit Tracker"), DeletableTracker {
         }
         addTracks.bind(this, track, mangaId)
     }
+
+    // KMK -->
+    /**
+     * Before "Create in Azit": titles Azit already has for this manga (same AniList id or page: [AzitDuplicates.linked],
+     * same name: [AzitDuplicates.sameName]). Nothing found (or Azit unreachable): an empty answer.
+     */
+    suspend fun duplicatesFor(mangaId: Long, draft: AzitCreateDraft): AzitDuplicates {
+        val track = Track.create(id).apply {
+            manga_id = mangaId
+            title = draft.query.title
+        }
+        val known = fullQuery(track)
+        return try {
+            api.duplicates(draft.query.copy(url = draft.query.url ?: known.url, anilistId = draft.query.anilistId ?: known.anilistId))
+        } catch (e: Exception) {
+            logcat(LogPriority.WARN, e) { "Azit Tracker: duplicate check failed" }
+            AzitDuplicates()
+        }
+    }
+
+    /** "Use this one": the manga is bound to a title Azit already has, instead of creating a new one. */
+    suspend fun bindExisting(mangaId: Long, entry: AzitEntry) {
+        val track = TrackSearch.create(id).apply {
+            remote_id = entry.mediaId
+            manga_id = mangaId
+            title = entry.title
+            tracking_url = "${getServer()}/media/${entry.mediaId}"
+            cover_url = AzitMapping.absoluteUrl(entry.coverUrl, getServer()).orEmpty()
+        }
+        addTracks.bind(this, track, mangaId)
+    }
+    // KMK <--
 
     // ---- Migration from AniList ----
 

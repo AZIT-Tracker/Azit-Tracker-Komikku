@@ -2,6 +2,7 @@ package eu.kanade.domain.track.interactor
 
 import eu.kanade.domain.download.interactor.DeleteDownload
 import eu.kanade.domain.track.model.toDbTrack
+import eu.kanade.domain.track.service.TrackingQueue
 import eu.kanade.tachiyomi.data.track.EnhancedTracker
 import eu.kanade.tachiyomi.data.track.Tracker
 import logcat.LogPriority
@@ -96,6 +97,9 @@ class SyncChapterProgressWithTrack(
                 // update Track in database
                 insertTrack.await(updatedTrack)
             }
+            // KMK -->
+            TrackingQueue.onSuccess(tracker.id) // it answered (the refresh before this): send what it missed
+            // KMK <--
             // KMK -->
             // Always update local chapters following Tracker even past chapters
             if (chapterUpdates.isNotEmpty() &&

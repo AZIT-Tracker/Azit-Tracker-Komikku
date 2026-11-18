@@ -139,6 +139,12 @@
     <string name="azit_open_in_azit">Open in Azit</string>
     <string name="azit_create_title">Create in Azit</string>
     <string name="azit_create_action">Create and track</string>
+    <string name="azit_duplicate_linked_title">Already in Azit</string>
+    <string name="azit_duplicate_linked_text">Azit already has a title with this page or AniList id, so it is not created again. Track this one instead.</string>
+    <string name="azit_duplicate_name_title">Is it one of these?</string>
+    <string name="azit_duplicate_name_text">Azit already has titles with this name. Track the right one, or create a new title anyway.</string>
+    <string name="azit_duplicate_use">Use this one</string>
+    <string name="azit_duplicate_create_anyway">Create anyway</string>
     <string name="azit_field_title">Title</string>
     <string name="azit_field_alt_titles">Alternative titles (one per line)</string>
     <string name="azit_field_type">Type</string>
@@ -297,4 +303,19 @@
     <string name="action_filter_hide_duplicate_chapters">Hide duplicate chapters</string>
     <string name="action_duplicates_keep_first">Show the first uploaded</string>
     <string name="action_duplicates_keep_last">Show the last uploaded</string>
+    <string name="tracking_queue_title">Waiting to be sent</string>
+    <string name="pref_show_tracking_queue">Show chapters waiting to be sent</string>
+    <string name="pref_show_tracking_queue_summary">The chapters read that a tracker could not receive yet, why, and a button to send them again</string>
+    <string name="tracking_queue_list">Waiting list</string>
+    <string name="tracking_queue_loading">Loading…</string>
+    <string name="tracking_queue_all_sent">Everything is sent.</string>
+    <string name="tracking_queue_waiting_count">%1$d title(s) waiting to be sent</string>
+    <string name="tracking_queue_retry">Retry now</string>
+    <string name="tracking_queue_sending">Sending…</string>
+    <string name="tracking_queue_not_sent">Chapter %1$s · not sent to %2$s</string>
+    <string name="tracking_queue_status">Status</string>
+    <string name="tracking_queue_tracker_sent">✓ %1$s: sent</string>
+    <string name="tracking_queue_tracker_waiting">✕ %1$s: chapter %2$s waiting</string>
+    <string name="tracking_queue_not_tried">Not tried yet</string>
+    <string name="tracking_queue_close">Close</string>
 </resources>

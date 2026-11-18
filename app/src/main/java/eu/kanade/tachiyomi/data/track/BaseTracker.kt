@@ -5,6 +5,7 @@ import androidx.annotation.CallSuper
 import eu.kanade.domain.track.interactor.AddTracks
 import eu.kanade.domain.track.model.toDomainTrack
 import eu.kanade.domain.track.service.TrackPreferences
+import eu.kanade.domain.track.service.TrackingQueue
 import eu.kanade.tachiyomi.data.database.models.Track
 import eu.kanade.tachiyomi.data.track.model.TrackMangaMetadata
 import eu.kanade.tachiyomi.data.track.model.TrackSearch
@@ -148,6 +149,9 @@ abstract class BaseTracker(
             track.toDomainTrack(idRequired = false)?.let {
                 insertTrack.await(it)
             }
+            // KMK -->
+            TrackingQueue.onSuccess(id) // this tracker answers: send the progress it missed
+            // KMK <--
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, e) { "Failed to update remote track data id=$id" }
             withUIContext { Injekt.get<Application>().toast(e.message) }

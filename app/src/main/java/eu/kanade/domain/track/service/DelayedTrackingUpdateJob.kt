@@ -23,9 +23,22 @@ class DelayedTrackingUpdateJob(private val context: Context, workerParams: Worke
     CoroutineWorker(context, workerParams) {
 
     override suspend fun doWork(): Result {
+        // KMK -->
+        // Never give up while something waits (offline for days is fine), and send tracker by tracker: one that is
+        // still unreachable does not hold back the others.
+        val delayedTrackingStore = Injekt.get<DelayedTrackingStore>()
+        withIOContext {
+            TrackingQueue.waitingTrackers().forEach { trackerId -> TrackingQueue.flush(trackerId) }
+        }
+        return if (delayedTrackingStore.getItems().isEmpty()) Result.success() else Result.retry()
+    }
+
+    @Suppress("unused")
+    private suspend fun upstreamDoWork(): Result {
         if (runAttemptCount > 3) {
             return Result.failure()
         }
+        // KMK <--
 
         val getTracks = Injekt.get<GetTracks>()
         val trackChapter = Injekt.get<TrackChapter>()
@@ -62,7 +75,9 @@ class DelayedTrackingUpdateJob(private val context: Context, workerParams: Worke
 
             val request = OneTimeWorkRequestBuilder<DelayedTrackingUpdateJob>()
                 .setConstraints(constraints)
-                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 5, TimeUnit.MINUTES)
+                // KMK -->
+                .setBackoffCriteria(BackoffPolicy.LINEAR, 1, TimeUnit.MINUTES) // retried soon, not hours later
+                // KMK <--
                 .addTag(TAG)
                 .build()
 

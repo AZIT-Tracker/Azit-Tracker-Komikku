@@ -60,6 +60,7 @@ import eu.kanade.tachiyomi.util.system.openInBrowser
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toPersistentList
 import kotlinx.collections.immutable.toPersistentMap
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.withUIContext
@@ -69,6 +70,7 @@ import tachiyomi.i18n.kmk.KMR
 import tachiyomi.i18n.sy.SYMR
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -97,6 +99,9 @@ object SettingsTrackingScreen : SearchableSettings {
         val trackPreferences = remember { Injekt.get<TrackPreferences>() }
         val trackerManager = remember { Injekt.get<TrackerManager>() }
         val sourceManager = remember { Injekt.get<SourceManager>() }
+        // KMK -->
+        val showQueue by trackPreferences.showTrackingQueue().collectAsState()
+        // KMK <--
 
         var dialog by remember { mutableStateOf<Any?>(null) }
         dialog?.run {
@@ -219,6 +224,20 @@ object SettingsTrackingScreen : SearchableSettings {
                 ),
             ),
             // KMK -->
+            Preference.PreferenceGroup(
+                title = stringResource(KMR.strings.tracking_queue_title),
+                preferenceItems = listOfNotNull(
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = trackPreferences.showTrackingQueue(),
+                        title = stringResource(KMR.strings.pref_show_tracking_queue),
+                        subtitle = stringResource(KMR.strings.pref_show_tracking_queue_summary),
+                    ),
+                    Preference.PreferenceItem.CustomPreference(title = stringResource(KMR.strings.tracking_queue_list)) {
+                        TrackingQueueList()
+                    }
+                        .takeIf { showQueue },
+                ).toPersistentList(),
+            ),
             Preference.PreferenceGroup(
                 title = stringResource(KMR.strings.azit_settings_title),
                 preferenceItems = persistentListOf(

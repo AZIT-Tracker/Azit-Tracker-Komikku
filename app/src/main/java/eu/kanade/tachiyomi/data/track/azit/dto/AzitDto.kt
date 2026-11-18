@@ -170,6 +170,21 @@ data class AzitEntry(
     val shortcutUrl: String? = null,
 )
 
+// KMK -->
+/**
+ * `POST /api/tracking/duplicates`, before "Create in Azit": [linked] already has this AniList id or page (creating
+ * is refused: the manga is bound to it instead); [sameName] has one of the manga's names ("is it this one?").
+ */
+@Serializable
+data class AzitDuplicates(
+    val linked: AzitEntry? = null,
+    @SerialName("same_name")
+    val sameName: List<AzitEntry> = emptyList(),
+) {
+    val any: Boolean get() = linked != null || sameName.isNotEmpty()
+}
+// KMK <--
+
 @Serializable
 data class AzitProgress(
     val chapter: Double? = null,

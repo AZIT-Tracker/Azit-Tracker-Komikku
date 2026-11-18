@@ -57,5 +57,8 @@ class TrackPreferences(
 
     /** Azit Tracker: bind a library manga automatically the first time one of its chapters is read. */
     fun azitAutoBind() = preferenceStore.getBoolean("pref_azit_auto_bind_key", true)
+
+    /** Settings -> Tracking: show the chapters read that a tracker has not accepted yet. */
+    fun showTrackingQueue() = preferenceStore.getBoolean("pref_show_tracking_queue_key", false)
     // KMK <--
 }

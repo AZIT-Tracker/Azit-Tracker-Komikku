@@ -75,6 +75,11 @@ data class AzitProgressWrite(
     val typeSlug: String? = null,
     @SerialName("cover_url")
     val coverUrl: String? = null,
+    // KMK -->
+    /** A cover uploaded first ([AzitApi.uploadCover]): Azit keeps the file instead of a link the site may refuse. */
+    @SerialName("cover_image_id")
+    val coverImageId: Long? = null,
+    // KMK <--
     val description: String? = null,
     val authors: List<String> = emptyList(),
     val genres: List<String> = emptyList(),

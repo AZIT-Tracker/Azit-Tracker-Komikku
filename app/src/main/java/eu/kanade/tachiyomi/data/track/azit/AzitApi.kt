@@ -23,6 +23,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -146,6 +147,20 @@ class AzitApi(
         }
     }
 
+    // KMK -->
+    /** Sends a cover file (the one Komikku shows); returns its id in Azit, for [AzitProgressWrite.coverImageId]. */
+    suspend fun uploadCover(bytes: ByteArray, mimeType: String): Long = withIOContext {
+        val body = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart("file", "cover", bytes.toRequestBody(mimeType.toMediaType()))
+            .build()
+        val response = execute {
+            client.newCall(POST("${server()}$IMAGES", headers(token()), body)).awaitSuccess()
+        }
+        json.parseToJsonElement(response).jsonObject["id"]!!.jsonPrimitive.content.toLong()
+    }
+    // KMK <--
+
     private fun headers(token: String): Headers = Headers.Builder()
         .add("Authorization", "Bearer $token")
         .add("Accept", "application/json")
@@ -168,6 +183,7 @@ class AzitApi(
 
         // KMK -->
         const val DUPLICATES = "/api/tracking/duplicates"
+        const val IMAGES = "/api/tracking/images"
         // KMK <--
         const val ENTRY = "/api/tracking/entry"
         const val MEDIA = "/api/media"

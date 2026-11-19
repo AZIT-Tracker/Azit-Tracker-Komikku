@@ -44,6 +44,8 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import cafe.adriel.voyager.navigator.LocalNavigator
+import cafe.adriel.voyager.navigator.currentOrThrow
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.domain.track.model.AutoTrackState
 import eu.kanade.domain.track.service.TrackPreferences
@@ -101,6 +103,7 @@ object SettingsTrackingScreen : SearchableSettings {
         val sourceManager = remember { Injekt.get<SourceManager>() }
         // KMK -->
         val showQueue by trackPreferences.showTrackingQueue().collectAsState()
+        val navigator = LocalNavigator.currentOrThrow
         // KMK <--
 
         var dialog by remember { mutableStateOf<Any?>(null) }
@@ -165,6 +168,11 @@ object SettingsTrackingScreen : SearchableSettings {
             Preference.PreferenceItem.SwitchPreference(
                 preference = trackPreferences.autoSyncProgressFromTrackers(),
                 title = stringResource(KMR.strings.pref_auto_sync_progress_from_trackers),
+            ),
+            Preference.PreferenceItem.TextPreference(
+                title = stringResource(KMR.strings.unlinked_entries_check),
+                subtitle = stringResource(KMR.strings.unlinked_entries_check_summary),
+                onClick = { navigator.push(UnlinkedEntriesScreen()) },
             ),
             // KMK <--
             // SY -->

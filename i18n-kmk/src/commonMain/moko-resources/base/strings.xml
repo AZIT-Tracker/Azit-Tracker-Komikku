@@ -117,6 +117,12 @@
     <string name="download_cache_renew_interval_info">If set to "manual", either refresh each manga or using the "Reindex downloads" action in "Advanced"</string>
     <!-- Tracking section -->
     <string name="pref_auto_sync_progress_from_trackers">Auto sync progress from Trackers</string>
+    <string name="migration_manual_pick">Picked: %1$s. Go back to use it, or tap another one.</string>
+    <string name="unlinked_entries_check">Check unlinked entries</string>
+    <string name="unlinked_entries_check_summary">See which series of your library are not linked to each tracker, and open them to link them</string>
+    <string name="unlinked_entries_title">Unlinked entries</string>
+    <string name="unlinked_entries_no_tracker">Log in to a tracker first</string>
+    <string name="unlinked_entries_none">Every series in your library is linked to %1$s</string>
     <string name="sync_progress_from_trackers_up_to_chapter">Sync progress from Trackers up to chapter %d</string>
     <string name="pref_track_on_add_library">Open track menu on adding to library</string>
     <string name="pref_remove_after_auto_marked_as_read">After automatically marked as read</string>

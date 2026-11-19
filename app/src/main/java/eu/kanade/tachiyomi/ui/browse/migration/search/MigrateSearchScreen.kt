@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalContext
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
@@ -13,14 +14,20 @@ import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.ui.browse.BulkFavoriteScreenModel
 import eu.kanade.tachiyomi.ui.browse.source.globalsearch.SearchScreenModel
 import eu.kanade.tachiyomi.ui.manga.MangaScreen
+import eu.kanade.tachiyomi.util.system.toast
 import mihon.feature.migration.dialog.MigrateMangaDialog
 import mihon.feature.migration.list.MigrationListScreen
+import tachiyomi.core.common.i18n.stringResource
+import tachiyomi.i18n.kmk.KMR
 
 class MigrateSearchScreen(private val mangaId: Long) : Screen() {
 
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
+        // KMK -->
+        val context = LocalContext.current
+        // KMK <--
 
         val screenModel = rememberScreenModel { MigrateSearchScreenModel(mangaId = mangaId) }
         val state by screenModel.state.collectAsState()
@@ -58,7 +65,11 @@ class MigrateSearchScreen(private val mangaId: Long) : Screen() {
                         screenModel.setMigrateDialog(mangaId, it)
                     } else {
                         migrateListScreen.addMatchOverride(current = mangaId, target = it.id)
-                        navigator.popUntil { screen -> screen is MigrationListScreen }
+                        // KMK -->
+                        // Stay on the results (to compare or pick another one); going back applies the choice.
+                        // navigator.popUntil { screen -> screen is MigrationListScreen }
+                        context.toast(context.stringResource(KMR.strings.migration_manual_pick, it.title))
+                        // KMK <--
                     }
                 }
             },

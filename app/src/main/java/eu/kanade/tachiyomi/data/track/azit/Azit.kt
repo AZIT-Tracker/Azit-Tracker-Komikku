@@ -8,6 +8,7 @@ import eu.kanade.domain.track.interactor.AddTracks
 import eu.kanade.domain.track.model.toDbTrack
 import eu.kanade.domain.track.model.toDomainTrack
 import eu.kanade.tachiyomi.R
+import eu.kanade.tachiyomi.data.cache.CoverCache
 import eu.kanade.tachiyomi.data.database.models.Track
 import eu.kanade.tachiyomi.data.track.BaseTracker
 import eu.kanade.tachiyomi.data.track.DeletableTracker
@@ -21,6 +22,8 @@ import eu.kanade.tachiyomi.data.track.azit.dto.AzitMediaType
 import eu.kanade.tachiyomi.data.track.azit.dto.AzitProgressWrite
 import eu.kanade.tachiyomi.data.track.azit.dto.AzitTitleQuery
 import eu.kanade.tachiyomi.data.track.model.TrackSearch
+import eu.kanade.tachiyomi.network.GET
+import eu.kanade.tachiyomi.network.awaitSuccess
 import eu.kanade.tachiyomi.source.online.HttpSource
 import exh.util.mangaType
 import kotlinx.collections.immutable.ImmutableList
@@ -215,7 +218,11 @@ class Azit(id: Long) : BaseTracker(id, "Azit Tracker"), DeletableTracker {
         if (track.remote_id == AzitMapping.CREATE_REMOTE_ID) {
             // The fields edited in the "Create in Azit" dialog, else what Komikku knows as is.
             val draft = pendingDrafts.remove(track.manga_id) ?: createDraft(track.manga_id)
-            return track.copyEntry(api.progress(draft.toWrite()))
+            // KMK -->
+            val write = draft.toWrite()
+            val coverId = uploadCover(track.manga_id, write.coverUrl)
+            return track.copyEntry(api.progress(if (coverId != null) write.copy(coverImageId = coverId) else write))
+            // KMK <--
         }
         val entry = linker.find(track.remote_id) { fullQuery(track) }
             ?: throw AzitException(context.stringResource(KMR.strings.azit_error_not_in_azit), code = 404)
@@ -543,6 +550,40 @@ class Azit(id: Long) : BaseTracker(id, "Azit Tracker"), DeletableTracker {
             totalChapters = totalChapters,
         )
     }
+
+    // KMK -->
+    /**
+     * The cover a new title gets: the file Komikku shows (its custom cover, the cached one, or downloaded with the
+     * source's own headers), uploaded to Azit. Sites often refuse their pictures elsewhere, so a link alone shows
+     * broken. Null when there is none or it fails: Azit then tries the link itself.
+     */
+    private suspend fun uploadCover(mangaId: Long, coverUrl: String?): Long? {
+        if (coverUrl.isNullOrBlank()) return null
+        return try {
+            val manga = getManga.await(mangaId)
+            val coverCache = Injekt.get<CoverCache>()
+            val cached = manga?.let { coverCache.getCustomCoverFile(it.id).takeIf { file -> file.exists() } }
+                ?: coverCache.getCoverFile(coverUrl)?.takeIf { it.exists() }
+            val bytes = cached?.readBytes() ?: run {
+                val source = manga?.let { sourceManager.get(it.source) as? HttpSource }
+                val request = GET(coverUrl, source?.headers ?: okhttp3.Headers.headersOf())
+                (source?.client ?: client).newCall(request).awaitSuccess().use { it.body.bytes() }
+            }
+            if (bytes.isEmpty()) return null
+            api.uploadCover(bytes, imageMimeType(bytes))
+        } catch (e: Exception) {
+            logcat(LogPriority.WARN, e) { "Azit Tracker: could not upload the cover" }
+            null
+        }
+    }
+
+    private fun imageMimeType(bytes: ByteArray): String = when {
+        bytes.size > 3 && bytes[0] == 0x89.toByte() && bytes[1] == 'P'.code.toByte() -> "image/png"
+        bytes.size > 3 && bytes[0] == 'G'.code.toByte() && bytes[1] == 'I'.code.toByte() -> "image/gif"
+        bytes.size > 11 && bytes[8] == 'W'.code.toByte() && bytes[9] == 'E'.code.toByte() -> "image/webp"
+        else -> "image/jpeg"
+    }
+    // KMK <--
 
     /** The page of the chapter just read (the title's shortcut in Azit) and the source's name. */
     private suspend fun readingPage(track: Track): Pair<String?, String?> {

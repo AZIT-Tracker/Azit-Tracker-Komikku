@@ -164,6 +164,8 @@ class AzitApi(
     private fun headers(token: String): Headers = Headers.Builder()
         .add("Authorization", "Bearer $token")
         .add("Accept", "application/json")
+        // Komikku says who it is: Azit then keeps it to manga and comics (never LNReader's novels).
+        .add("X-Azit-App", "komikku")
         .build()
 
     private suspend fun execute(call: suspend () -> okhttp3.Response): String {

@@ -63,8 +63,9 @@ class AzitMappingTest {
 
     @Test
     fun `kind and authors`() {
-        AzitMapping.kindFor(listOf("Action", "Light Novel"), "Some Source") shouldBe "novel"
-        AzitMapping.kindFor(listOf("Action"), "NovelBin") shouldBe "novel"
+        // Never a novel: those belong to LNReader.
+        AzitMapping.kindFor(listOf("Action", "Light Novel"), "Some Source") shouldBe "manga"
+        AzitMapping.kindFor(listOf("Action"), "NovelBin") shouldBe "manga"
         AzitMapping.kindFor(listOf("Action"), "MangaDex") shouldBe "manga"
         AzitMapping.kindFor(null, null) shouldBe "manga"
         AzitMapping.authors("Jane Doe, John Roe", "John Roe") shouldBe listOf("Jane Doe", "John Roe")
@@ -74,10 +75,8 @@ class AzitMappingTest {
     @Test
     fun `the type is guessed from genres, source and Komikku's reading type`() {
         val all = AzitMapping.BOOK_TYPE_SLUGS
-        AzitMapping.guessTypeSlug(listOf("Action", "Light Novel"), "Some Source", MangaType.TYPE_MANGA, all) shouldBe
-            "light_novel"
-        AzitMapping.guessTypeSlug(listOf("Web Novel"), null, MangaType.TYPE_MANGA, all) shouldBe "web_novel"
-        AzitMapping.guessTypeSlug(listOf("Action"), "NovelBin", MangaType.TYPE_MANGA, all) shouldBe "novel"
+        AzitMapping.guessTypeSlug(listOf("Action", "Light Novel"), "Some Source", MangaType.TYPE_MANGA, all) shouldBe "manga"
+        AzitMapping.guessTypeSlug(listOf("Action"), "NovelBin", MangaType.TYPE_MANGA, all) shouldBe "manga"
         AzitMapping.guessTypeSlug(listOf("Action"), "Toonily", MangaType.TYPE_MANHWA, all) shouldBe "manhwa"
         AzitMapping.guessTypeSlug(listOf("Long Strip"), null, MangaType.TYPE_WEBTOON, all) shouldBe "webtoon"
         AzitMapping.guessTypeSlug(emptyList(), null, MangaType.TYPE_MANHUA, all) shouldBe "manhua"
@@ -88,8 +87,8 @@ class AzitMappingTest {
     fun `a type Azit doesn't have is left automatic`() {
         val onlyManga = listOf("manga", "novel")
         AzitMapping.guessTypeSlug(emptyList(), null, MangaType.TYPE_WEBTOON, onlyManga) shouldBe null
-        // A light novel falls back on "novel" when that is all Azit has.
-        AzitMapping.guessTypeSlug(listOf("Light Novel"), null, MangaType.TYPE_MANGA, onlyManga) shouldBe "novel"
+        // Never a novel type, even when Azit has one.
+        AzitMapping.guessTypeSlug(listOf("Light Novel"), null, MangaType.TYPE_MANGA, listOf("novel")) shouldBe null
     }
 
     @Test

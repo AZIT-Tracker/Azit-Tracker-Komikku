@@ -42,7 +42,7 @@ class AzitMigrationTest {
             """,
         )
 
-        AzitMapping.bookTypes(sections).map { it.id } shouldBe listOf(3L, 4L, 7L)
+        AzitMapping.bookTypes(sections).map { it.id } shouldBe listOf(3L, 4L) // no novel types: LNReader's
         AzitMapping.kindForType("light_novel") shouldBe "novel"
         AzitMapping.kindForType("manhwa") shouldBe "manga"
         AzitMapping.kindForType("comic") shouldBe "comic"

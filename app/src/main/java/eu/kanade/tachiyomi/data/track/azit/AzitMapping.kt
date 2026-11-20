@@ -88,12 +88,12 @@ object AzitMapping {
         else -> null
     }
 
-    /** "novel" for light / web novels (from the genres or the source name), "manga" otherwise. */
-    fun kindFor(genres: List<String>?, sourceName: String?): String {
-        val novel = genres.orEmpty().any { it.contains("novel", ignoreCase = true) } ||
-            sourceName?.contains("novel", ignoreCase = true) == true
-        return if (novel) AzitTitleQuery.KIND_NOVEL else AzitTitleQuery.KIND_MANGA
-    }
+    /**
+     * Always "manga": Komikku never sends novels to Azit (they belong to LNReader, which only sends novels), so the
+     * two apps never change each other's titles. The server refuses them too (`X-Azit-App: komikku`).
+     */
+    @Suppress("UNUSED_PARAMETER")
+    fun kindFor(genres: List<String>?, sourceName: String?): String = AzitTitleQuery.KIND_MANGA
 
     /** "Jane Doe, John Roe" + "John Roe" → [Jane Doe, John Roe]. */
     fun authors(author: String?, artist: String?): List<String> =
@@ -109,7 +109,7 @@ object AzitMapping {
         if (value % 1.0 == 0.0) value.toLong().toString() else value.toString()
 
     /** Azit media types a reader app deals with (searched, and offered when creating a title). */
-    val BOOK_TYPE_SLUGS = listOf("manga", "manhwa", "manhua", "webtoon", "comic", "novel", "light_novel", "web_novel")
+    val BOOK_TYPE_SLUGS = listOf("manga", "manhwa", "manhua", "webtoon", "comic") // never novels: LNReader's
 
     /** The `kind` Azit expects for a media type. */
     fun kindForType(typeSlug: String?, fallback: String = AzitTitleQuery.KIND_MANGA): String = when (typeSlug) {
@@ -129,8 +129,8 @@ object AzitMapping {
     }
 
     /**
-     * The Azit type of a manga for "Create in Azit": novels from the genres or the source name (light / web novel
-     * when said), else Komikku's own type guess. Null when Azit has no such type (the server then picks one).
+     * The Azit type of a manga for "Create in Azit": Komikku's own type guess (never a novel: those are LNReader's).
+     * Null when Azit has no such type (the server then picks one).
      */
     fun guessTypeSlug(
         genres: List<String>?,
@@ -138,16 +138,7 @@ object AzitMapping {
         comicType: MangaType,
         availableSlugs: Collection<String>,
     ): String? {
-        val tags = genres.orEmpty()
-        val guess = when {
-            tags.any { it.contains("light novel", ignoreCase = true) } -> "light_novel"
-            tags.any { it.contains("web novel", ignoreCase = true) } -> "web_novel"
-            kindFor(genres, sourceName) == AzitTitleQuery.KIND_NOVEL -> "novel"
-            else -> typeSlugFor(comicType)
-        }
-        return guess.takeIf { it in availableSlugs }
-            // A light / web novel on a server with only "novel".
-            ?: "novel".takeIf { guess.endsWith("novel") && it in availableSlugs }
+        return typeSlugFor(comicType).takeIf { it in availableSlugs && it in BOOK_TYPE_SLUGS }
     }
 
     /** Book type ids of Azit, in the order of [BOOK_TYPE_SLUGS]. */

@@ -4,7 +4,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.platform.LocalContext
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
@@ -14,20 +13,20 @@ import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.ui.browse.BulkFavoriteScreenModel
 import eu.kanade.tachiyomi.ui.browse.source.globalsearch.SearchScreenModel
 import eu.kanade.tachiyomi.ui.manga.MangaScreen
-import eu.kanade.tachiyomi.util.system.toast
 import mihon.feature.migration.dialog.MigrateMangaDialog
 import mihon.feature.migration.list.MigrationListScreen
-import tachiyomi.core.common.i18n.stringResource
-import tachiyomi.i18n.kmk.KMR
 
-class MigrateSearchScreen(private val mangaId: Long) : Screen() {
+class MigrateSearchScreen(
+    private val mangaId: Long,
+    // KMK -->
+    /** Reopened from the migration's ←: going back leaves the migration, to the entry it started from. */
+    private val backToEntry: Boolean = false,
+    // KMK <--
+) : Screen() {
 
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
-        // KMK -->
-        val context = LocalContext.current
-        // KMK <--
 
         val screenModel = rememberScreenModel { MigrateSearchScreenModel(mangaId = mangaId) }
         val state by screenModel.state.collectAsState()
@@ -36,6 +35,9 @@ class MigrateSearchScreen(private val mangaId: Long) : Screen() {
         val bulkFavoriteScreenModel = rememberScreenModel { BulkFavoriteScreenModel() }
         val bulkFavoriteState by bulkFavoriteScreenModel.state.collectAsState()
 
+        // KMK -->
+        BackHandler(enabled = backToEntry && !bulkFavoriteState.selectionMode) { leaveToEntry(navigator) }
+        // KMK <--
         BackHandler(enabled = bulkFavoriteState.selectionMode) {
             bulkFavoriteScreenModel.backHandler()
         }
@@ -44,7 +46,9 @@ class MigrateSearchScreen(private val mangaId: Long) : Screen() {
         MigrateSearchScreen(
             state = state,
             fromSourceId = state.from?.source,
-            navigateUp = navigator::pop,
+            // KMK -->
+            navigateUp = { if (backToEntry) leaveToEntry(navigator) else navigator.pop() },
+            // KMK <--
             onChangeSearchQuery = screenModel::updateSearchQuery,
             onSearch = { screenModel.search() },
             getManga = { screenModel.getManga(it) },
@@ -66,10 +70,9 @@ class MigrateSearchScreen(private val mangaId: Long) : Screen() {
                     } else {
                         migrateListScreen.addMatchOverride(current = mangaId, target = it.id)
                         // KMK -->
-                        // Stay on the results (to compare or pick another one); going back applies the choice.
-                        // navigator.popUntil { screen -> screen is MigrationListScreen }
-                        context.toast(context.stringResource(KMR.strings.migration_manual_pick, it.title))
+                        MigrateSearchScreenModel.keepResults(mangaId, state)
                         // KMK <--
+                        navigator.popUntil { screen -> screen is MigrationListScreen }
                     }
                 }
             },
@@ -110,4 +113,12 @@ class MigrateSearchScreen(private val mangaId: Long) : Screen() {
         )
         // KMK <--
     }
+
+    // KMK -->
+    /** Out of the migration: back to the screen it was started from (the entry), the kept results forgotten. */
+    private fun leaveToEntry(navigator: cafe.adriel.voyager.navigator.Navigator) {
+        MigrateSearchScreenModel.forgetResults()
+        navigator.popUntil { it !is MigrateSearchScreen && it !is MigrationListScreen }
+    }
+    // KMK <--
 }

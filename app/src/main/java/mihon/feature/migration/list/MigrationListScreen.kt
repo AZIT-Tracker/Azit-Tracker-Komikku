@@ -15,6 +15,7 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.ui.browse.migration.search.MigrateSearchScreen
+import eu.kanade.tachiyomi.ui.browse.migration.search.MigrateSearchScreenModel
 import eu.kanade.tachiyomi.ui.manga.MangaScreen
 import eu.kanade.tachiyomi.util.system.toast
 import mihon.feature.migration.config.MigrationConfigScreen
@@ -40,7 +41,15 @@ class MigrationListScreen(
 
     fun addMatchOverride(current: Long, target: Long) {
         matchOverride = current to target
+        // KMK -->
+        lastSearchedMangaId = current
+        // KMK <--
     }
+
+    // KMK -->
+    /** The series last searched by hand: the top bar's ← reopens that search to look at the other results. */
+    private var lastSearchedMangaId: Long? = null
+    // KMK <--
 
     @Composable
     override fun Content() {
@@ -115,12 +124,26 @@ class MigrationListScreen(
                 navigator push MigrateSearchScreen(migrationItem.manga.id)
             },
             onSkip = { screenModel.removeManga(it) },
-            onMigrate = { screenModel.migrateNow(mangaId = it, replace = true) },
-            onCopy = { screenModel.migrateNow(mangaId = it, replace = false) },
+            // KMK -->
+            // Confirmed: the kept search results (for the ←) are no longer needed.
+            onMigrate = {
+                MigrateSearchScreenModel.forgetResults()
+                screenModel.migrateNow(mangaId = it, replace = true)
+            },
+            onCopy = {
+                MigrateSearchScreenModel.forgetResults()
+                screenModel.migrateNow(mangaId = it, replace = false)
+            },
+            // KMK <--
             openMigrationDialog = screenModel::showMigrateDialog,
             // KMK -->
             onCancel = { screenModel.cancelManga(it) },
             openOptionsDialog = screenModel::openOptionsDialog,
+            navigateUp = {
+                // Back to the search results just picked from (no "stop migrating"); none yet: the usual back.
+                val searched = lastSearchedMangaId
+                if (searched != null) navigator.push(MigrateSearchScreen(searched, backToEntry = true)) else screenModel.showExitDialog()
+            },
             // KMK <--
         )
 
@@ -133,8 +156,14 @@ class MigrationListScreen(
                     skippedCount = dialog.skippedCount,
                     onMigrate = {
                         if (dialog.copy) {
+                            // KMK -->
+                            MigrateSearchScreenModel.forgetResults()
+                            // KMK <--
                             screenModel.copyMangas()
                         } else {
+                            // KMK -->
+                            MigrateSearchScreenModel.forgetResults()
+                            // KMK <--
                             screenModel.migrateMangas()
                         }
                     },
@@ -149,7 +178,12 @@ class MigrationListScreen(
             MigrationListScreenModel.Dialog.Exit -> {
                 MigrationExitDialog(
                     onDismissRequest = screenModel::dismissDialog,
-                    exitMigration = navigator::pop,
+                    // KMK -->
+                    exitMigration = {
+                        MigrateSearchScreenModel.forgetResults()
+                        navigator.pop()
+                    },
+                    // KMK <--
                 )
             }
             // KMK -->

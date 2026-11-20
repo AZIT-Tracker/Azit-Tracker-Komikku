@@ -29,21 +29,46 @@ class MigrateSearchScreenModel(
     }
 
     init {
-        screenModelScope.launch {
-            val manga = getManga.await(mangaId)!!
-            mutableState.update {
-                it.copy(
-                    from = manga,
-                    searchQuery = manga.title,
-                )
+        // KMK -->
+        // Back from the migration (its ←): the results picked from, as they were, without searching again.
+        val kept = keptResults[mangaId]
+        if (kept != null) {
+            mutableState.update { kept.copy(dialog = null) }
+        } else {
+            // KMK <--
+            screenModelScope.launch {
+                val manga = getManga.await(mangaId)!!
+                mutableState.update {
+                    it.copy(
+                        from = manga,
+                        searchQuery = manga.title,
+                    )
+                }
+                search()
             }
-            search()
+            // KMK -->
         }
+        // KMK <--
 
         // KMK -->
         shouldPinnedSourcesHidden()
         // KMK <--
     }
+
+    // KMK -->
+    companion object {
+        /** The search results a migration picked from, per series: kept until the migration is confirmed or left. */
+        private val keptResults = mutableMapOf<Long, State>()
+
+        fun keepResults(mangaId: Long, state: State) {
+            keptResults[mangaId] = state
+        }
+
+        fun forgetResults() {
+            keptResults.clear()
+        }
+    }
+    // KMK <--
 
     override fun getEnabledSources(): List<Source> {
         return migrationSources.mapNotNull { sourceManager.get(it) }

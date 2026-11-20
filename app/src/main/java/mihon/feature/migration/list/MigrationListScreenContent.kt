@@ -84,11 +84,17 @@ fun MigrationListScreenContent(
     // KMK -->
     onCancel: (Long) -> Unit,
     openOptionsDialog: () -> Unit,
+
+    /** The ← of the top bar: back to the screen before (like the phone's back button). */
+    navigateUp: () -> Unit,
     // KMK <--
 ) {
     Scaffold(
         topBar = { scrollBehavior ->
             AppBar(
+                // KMK -->
+                navigateUp = navigateUp,
+                // KMK <--
                 title = if (items.isNotEmpty()) {
                     stringResource(MR.strings.migrationListScreenTitleWithProgress, finishedCount, items.size)
                 } else {

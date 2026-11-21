@@ -148,6 +148,8 @@ class DomainModule : InjektModule {
         // Azit -->
         addFactory { eu.kanade.domain.chapter.interactor.GetHiddenChapters(get()) }
         addFactory { eu.kanade.domain.chapter.interactor.SetChaptersHidden(get()) }
+        addFactory { eu.kanade.domain.chapter.interactor.GetChapterEditions(get()) }
+        addFactory { eu.kanade.domain.chapter.interactor.SetChapterEditions(get()) }
         // Azit <--
         addFactory {
             MigrateMangaUseCase(

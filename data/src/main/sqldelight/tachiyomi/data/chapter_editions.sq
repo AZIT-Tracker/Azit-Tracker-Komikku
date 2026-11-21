@@ -1,0 +1,27 @@
+import kotlin.Boolean;
+
+-- Azit -->
+-- Chapters counted as another chapter number or as a volume (selection menu -> Chapter edition).
+CREATE TABLE chapter_editions(
+    chapter_id INTEGER NOT NULL PRIMARY KEY,
+    is_volume INTEGER AS Boolean NOT NULL,
+    number_start REAL NOT NULL,
+    number_end REAL,
+    FOREIGN KEY(chapter_id) REFERENCES chapters (_id)
+    ON DELETE CASCADE
+);
+
+getByMangaId:
+SELECT CE.*
+FROM chapter_editions CE
+JOIN chapters C ON C._id = CE.chapter_id
+WHERE C.manga_id = :mangaId;
+
+upsert:
+INSERT OR REPLACE INTO chapter_editions(chapter_id, is_volume, number_start, number_end)
+VALUES (:chapterId, :isVolume, :start, :end);
+
+remove:
+DELETE FROM chapter_editions
+WHERE chapter_id IN :chapterIds;
+-- Azit <--

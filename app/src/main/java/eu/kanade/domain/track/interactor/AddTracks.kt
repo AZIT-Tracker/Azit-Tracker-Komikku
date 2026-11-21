@@ -1,6 +1,7 @@
 package eu.kanade.domain.track.interactor
 
 import android.app.Application
+import eu.kanade.domain.chapter.interactor.GetChapterEditions
 import eu.kanade.domain.track.model.toDbTrack
 import eu.kanade.domain.track.model.toDomainTrack
 import eu.kanade.tachiyomi.data.database.models.Track
@@ -37,6 +38,9 @@ class AddTracks(
     suspend fun bind(tracker: Tracker, item: Track, mangaId: Long) = withNonCancellableContext {
         withIOContext {
             val allChapters = getChaptersByMangaId.await(mangaId)
+                // Azit -->: an edited chapter counts as the last number given to it
+                .let { Injekt.get<GetChapterEditions>().applyTo(mangaId, it) }
+            // Azit <--
             val hasReadChapters = allChapters.any { it.read }
             tracker.bind(item, hasReadChapters)
 

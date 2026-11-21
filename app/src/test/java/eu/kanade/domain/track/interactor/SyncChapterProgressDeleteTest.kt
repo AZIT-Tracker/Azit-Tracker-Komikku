@@ -79,6 +79,9 @@ class SyncChapterProgressDeleteTest {
             downloadPreferences = preferences,
             deleteDownload = deleteDownload,
             getManga = getManga,
+            // Azit -->
+            getChapterEditions = { emptyMap() },
+            // Azit <--
         )
 
         try {

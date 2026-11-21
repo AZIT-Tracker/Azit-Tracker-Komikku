@@ -30,6 +30,8 @@ import androidx.compose.material.icons.outlined.BookmarkRemove
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.DoneAll
 import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.EditOff
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.RemoveDone
@@ -88,6 +90,8 @@ fun MangaBottomActionMenu(
     // Azit -->
     onHideClicked: (() -> Unit)? = null,
     onUnhideClicked: (() -> Unit)? = null,
+    onEditChaptersClicked: (() -> Unit)? = null,
+    onClearChapterEditionClicked: (() -> Unit)? = null,
     // Azit <--
 ) {
     AnimatedVisibility(
@@ -104,9 +108,15 @@ fun MangaBottomActionMenu(
             val haptic = LocalHapticFeedback.current
             val confirm = remember {
                 mutableStateListOf(
-                    false, false, false, false, false, false, false,
+                    false,
+                    false,
+                    false,
+                    false,
+                    false,
+                    false,
+                    false,
                     // Azit -->
-                    false, false,
+                    false,
                     // Azit <--
                 )
             }
@@ -192,24 +202,63 @@ fun MangaBottomActionMenu(
                         onClick = onDeleteClicked,
                     )
                 }
-                // Azit -->
-                if (onHideClicked != null) {
+                // Azit -->: more options (hide, chapter edition) open from the "more" button, like the library's bar
+                if (onHideClicked != null || onUnhideClicked != null || onEditChaptersClicked != null) {
+                    var overflowMenuOpen by remember { mutableStateOf(false) }
                     Button(
-                        title = stringResource(KMR.strings.action_hide_chapters),
-                        icon = Icons.Outlined.VisibilityOff,
+                        title = stringResource(MR.strings.label_more),
+                        icon = Icons.Outlined.MoreVert,
                         toConfirm = confirm[7],
                         onLongClick = { onLongClickItem(7) },
-                        onClick = onHideClicked,
-                    )
-                }
-                if (onUnhideClicked != null) {
-                    Button(
-                        title = stringResource(KMR.strings.action_unhide_chapters),
-                        icon = Icons.Outlined.Visibility,
-                        toConfirm = confirm[8],
-                        onLongClick = { onLongClickItem(8) },
-                        onClick = onUnhideClicked,
-                    )
+                        onClick = { overflowMenuOpen = true },
+                    ) {
+                        DropdownMenu(
+                            expanded = overflowMenuOpen,
+                            onDismissRequest = { overflowMenuOpen = false },
+                            offset = BottomBarMenuDpOffset,
+                        ) {
+                            if (onHideClicked != null) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(KMR.strings.action_hide_chapters)) },
+                                    leadingIcon = { Icon(Icons.Outlined.VisibilityOff, contentDescription = null) },
+                                    onClick = {
+                                        overflowMenuOpen = false
+                                        onHideClicked()
+                                    },
+                                )
+                            }
+                            if (onUnhideClicked != null) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(KMR.strings.action_unhide_chapters)) },
+                                    leadingIcon = { Icon(Icons.Outlined.Visibility, contentDescription = null) },
+                                    onClick = {
+                                        overflowMenuOpen = false
+                                        onUnhideClicked()
+                                    },
+                                )
+                            }
+                            if (onEditChaptersClicked != null) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(KMR.strings.action_chapter_edition)) },
+                                    leadingIcon = { Icon(Icons.Outlined.Edit, contentDescription = null) },
+                                    onClick = {
+                                        overflowMenuOpen = false
+                                        onEditChaptersClicked()
+                                    },
+                                )
+                            }
+                            if (onClearChapterEditionClicked != null) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(KMR.strings.action_clear_chapter_edition)) },
+                                    leadingIcon = { Icon(Icons.Outlined.EditOff, contentDescription = null) },
+                                    onClick = {
+                                        overflowMenuOpen = false
+                                        onClearChapterEditionClicked()
+                                    },
+                                )
+                            }
+                        }
+                    }
                 }
                 // Azit <--
             }

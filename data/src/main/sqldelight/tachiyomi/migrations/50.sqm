@@ -1,0 +1,12 @@
+import kotlin.Boolean;
+
+-- Azit -->
+CREATE TABLE chapter_editions(
+    chapter_id INTEGER NOT NULL PRIMARY KEY,
+    is_volume INTEGER AS Boolean NOT NULL,
+    number_start REAL NOT NULL,
+    number_end REAL,
+    FOREIGN KEY(chapter_id) REFERENCES chapters (_id)
+    ON DELETE CASCADE
+);
+-- Azit <--

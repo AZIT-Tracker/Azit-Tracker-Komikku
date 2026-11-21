@@ -92,6 +92,10 @@ class Azit(id: Long) : BaseTracker(id, "Azit Tracker"), DeletableTracker {
     private val getManga: GetManga by injectLazy()
     private val getTracks: GetTracks by injectLazy()
     private val getChaptersByMangaId: GetChaptersByMangaId by injectLazy()
+
+    // KMK -->
+    private val getChapterEditions: eu.kanade.domain.chapter.interactor.GetChapterEditions by injectLazy()
+    // KMK <--
     private val getHistory: GetHistory by injectLazy()
     private val sourceManager: SourceManager by injectLazy()
     private val addTracks: AddTracks by injectLazy()
@@ -365,6 +369,9 @@ class Azit(id: Long) : BaseTracker(id, "Azit Tracker"), DeletableTracker {
                 )
             }
         val chapters = getChaptersByMangaId.await(mangaId)
+            // KMK -->: an edited chapter counts as the last number given to it
+            .let { getChapterEditions.applyTo(mangaId, it) }
+        // KMK <--
         val readDates = getHistory.await(mangaId).mapNotNull { it.readAt?.time?.takeIf { time -> time > 0 } }
         val local = AzitLocalReading(
             lastReadChapter = chapters.filter { it.read }.maxOfOrNull { it.chapterNumber }?.takeIf { it > 0 } ?: 0.0,
@@ -531,7 +538,11 @@ class Azit(id: Long) : BaseTracker(id, "Azit Tracker"), DeletableTracker {
             ?.takeIf { it > 0 }
         val releaseStatus = AzitMapping.toReleaseStatus(manga.status)
         val totalChapters = if (releaseStatus == "finished") {
-            getChaptersByMangaId.await(manga.id).maxOfOrNull { it.chapterNumber }?.toInt()?.takeIf { it > 0 }
+            getChaptersByMangaId.await(manga.id)
+                // KMK -->
+                .let { getChapterEditions.applyTo(manga.id, it) }
+                // KMK <--
+                .maxOfOrNull { it.chapterNumber }?.toInt()?.takeIf { it > 0 }
         } else {
             null
         }
@@ -590,7 +601,11 @@ class Azit(id: Long) : BaseTracker(id, "Azit Tracker"), DeletableTracker {
         return try {
             val manga = getManga.await(track.manga_id) ?: return null to null
             val source = sourceManager.get(manga.source) as? HttpSource ?: return null to null
-            val chapters = getChaptersByMangaId.await(manga.id).filter { it.chapterNumber == track.last_chapter_read }
+            val chapters = getChaptersByMangaId.await(manga.id)
+                // KMK -->
+                .let { getChapterEditions.applyTo(manga.id, it) }
+                // KMK <--
+                .filter { it.chapterNumber == track.last_chapter_read }
             val chapter = chapters.firstOrNull { it.read } ?: chapters.firstOrNull()
             val url = chapter?.let { runCatching { source.getChapterUrl(it.toSChapter()) }.getOrNull() }
                 ?: mangaUrl(manga)

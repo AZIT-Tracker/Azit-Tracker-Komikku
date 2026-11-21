@@ -51,6 +51,7 @@ import eu.kanade.presentation.manga.ChapterSettingsDialog
 import eu.kanade.presentation.manga.DuplicateMangaDialog
 import eu.kanade.presentation.manga.EditCoverAction
 import eu.kanade.presentation.manga.MangaScreen
+import eu.kanade.presentation.manga.components.ChapterEditionDialog
 import eu.kanade.presentation.manga.components.ClearMangaDialog
 import eu.kanade.presentation.manga.components.DeleteChaptersDialog
 import eu.kanade.presentation.manga.components.MangaCoverDialog
@@ -395,6 +396,8 @@ class MangaScreen(
             onMultiBookmarkClicked = screenModel::bookmarkChapters,
             // Azit -->
             onMultiHideClicked = screenModel::hideChapters,
+            onEditChaptersClicked = screenModel::showChapterEditionDialog,
+            onClearChapterEditionClicked = screenModel::clearChapterEditions,
             // Azit <--
             onMultiMarkAsReadClicked = screenModel::markChaptersRead,
             onMarkPreviousAsReadClicked = screenModel::markPreviousChapterRead,
@@ -490,6 +493,20 @@ class MangaScreen(
                     },
                 )
             }
+            // Azit -->
+            is MangaScreenModel.Dialog.ChapterEdition -> {
+                ChapterEditionDialog(
+                    chapters = dialog.chapters,
+                    editions = dialog.editions,
+                    onDismissRequest = onDismissRequest,
+                    onConfirm = { editions, cleared ->
+                        onDismissRequest()
+                        screenModel.saveChapterEditions(editions, cleared)
+                    },
+                )
+            }
+            // Azit <--
+
             is MangaScreenModel.Dialog.DeleteChapters -> {
                 DeleteChaptersDialog(
                     onDismissRequest = onDismissRequest,

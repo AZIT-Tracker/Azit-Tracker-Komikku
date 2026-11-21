@@ -16,8 +16,18 @@ fun List<Chapter>.getNextUnread(
     // SY -->
     mergedManga: Map<Long, Manga>,
     // SY <--
+    // Azit -->
+    hiddenChapterIds: Set<Long> = emptySet(),
+    // Azit <--
 ): Chapter? {
-    return applyFilters(manga, downloadManager/* SY --> */, mergedManga/* SY <-- */).let { chapters ->
+    return applyFilters(
+        manga,
+        downloadManager, /* SY --> */
+        mergedManga, /* SY <-- */
+        // Azit -->
+        hiddenChapterIds,
+        // Azit <--
+    ).let { chapters ->
         // SY -->
         if (manga.isEhBasedManga()) {
             return@let if (manga.sortDescending()) {

@@ -1,11 +1,16 @@
 package eu.kanade.domain.track.interactor
 
 import eu.kanade.domain.download.interactor.DeleteDownload
+import eu.kanade.domain.track.service.TrackingQueue
 import eu.kanade.tachiyomi.data.track.Tracker
 import io.kotest.matchers.shouldBe
 import io.mockk.coEvery
 import io.mockk.every
+import io.mockk.just
 import io.mockk.mockk
+import io.mockk.mockkObject
+import io.mockk.runs
+import io.mockk.unmockkObject
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import tachiyomi.core.common.preference.Preference
@@ -57,7 +62,16 @@ class SyncChapterProgressDeleteTest {
         }
         val getChapters = mockk<GetChaptersByMangaId> { coEvery { await(1L, any()) } returns chapters }
         val getManga = mockk<GetManga> { coEvery { await(1L) } returns manga }
-        val tracker = mockk<Tracker> { every { hasNotStartedReading(any()) } returns false }
+        val tracker = mockk<Tracker> {
+            every { hasNotStartedReading(any()) } returns false
+            // Azit -->: the sync tells the offline queue the tracker answered (sends what waits for it)
+            every { id } returns 2L
+            // Azit <--
+        }
+        // Azit -->: the offline queue itself is not under test (it reads its store from the app)
+        mockkObject(TrackingQueue)
+        every { TrackingQueue.onSuccess(any()) } just runs
+        // Azit <--
         val sync = SyncChapterProgressWithTrack(
             updateChapter = mockk<UpdateChapter>(relaxed = true),
             insertTrack = mockk<InsertTrack>(relaxed = true),
@@ -67,7 +81,13 @@ class SyncChapterProgressDeleteTest {
             getManga = getManga,
         )
 
-        runBlocking { sync.sync(1L, remoteTrack, tracker) } shouldBe 4
+        try {
+            runBlocking { sync.sync(1L, remoteTrack, tracker) } shouldBe 4
+        } finally {
+            // Azit -->
+            unmockkObject(TrackingQueue)
+            // Azit <--
+        }
     }
 
     @Test

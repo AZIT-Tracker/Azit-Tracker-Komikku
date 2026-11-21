@@ -6,6 +6,7 @@ import tachiyomi.domain.chapter.interactor.GetChaptersByMangaId
 import tachiyomi.domain.chapter.interactor.GetMergedChaptersByMangaId
 import tachiyomi.domain.chapter.model.Chapter
 import tachiyomi.domain.chapter.service.getChapterSort
+import tachiyomi.domain.chapter.service.withoutHiddenChapters
 import tachiyomi.domain.history.repository.HistoryRepository
 import tachiyomi.domain.manga.interactor.GetManga
 import kotlin.math.max
@@ -17,6 +18,10 @@ class GetNextChapters(
     // SY <--
     private val getManga: GetManga,
     private val historyRepository: HistoryRepository,
+    // Azit -->
+    /** The chapters hidden one by one (selection menu -> Hide): never offered as the next chapter. */
+    private val getHiddenChapterIds: suspend () -> Set<Long> = { emptySet() },
+    // Azit <--
 ) {
 
     suspend fun await(onlyUnread: Boolean = true): List<Chapter> {
@@ -25,11 +30,24 @@ class GetNextChapters(
     }
 
     suspend fun await(mangaId: Long, onlyUnread: Boolean = true): List<Chapter> {
+        // Azit -->
+        return await(mangaId, onlyUnread, keepId = null)
+    }
+
+    /** [keepId]: a chapter kept even if hidden (the one read last, so the next ones are found after it). */
+    private suspend fun await(mangaId: Long, onlyUnread: Boolean, keepId: Long?): List<Chapter> {
+        // Azit <--
         val manga = getManga.await(mangaId) ?: return emptyList()
+        // Azit -->
+        val hiddenIds = getHiddenChapterIds()
+        // Azit <--
 
         // SY -->
         if (manga.source == MERGED_SOURCE_ID) {
             val chapters = getMergedChaptersByMangaId.await(mangaId, applyFilter = true)
+                // Azit -->
+                .withoutHiddenChapters(hiddenIds, manga.showHiddenChapters, keepId) { it.id }
+                // Azit <--
                 .sortedWith(getChapterSort(manga, sortDescending = false))
 
             return if (onlyUnread) {
@@ -40,6 +58,9 @@ class GetNextChapters(
         }
         if (manga.isEhBasedManga()) {
             val chapters = getChaptersByMangaId.await(mangaId, applyFilter = true)
+                // Azit -->
+                .withoutHiddenChapters(hiddenIds, manga.showHiddenChapters, keepId) { it.id }
+                // Azit <--
                 .sortedWith(getChapterSort(manga, sortDescending = false))
 
             return if (onlyUnread) {
@@ -51,6 +72,9 @@ class GetNextChapters(
         // SY <--
 
         val chapters = getChaptersByMangaId.await(mangaId, applyFilter = true)
+            // Azit -->
+            .withoutHiddenChapters(hiddenIds, manga.showHiddenChapters, keepId) { it.id }
+            // Azit <--
             .sortedWith(getChapterSort(manga, sortDescending = false))
 
         return if (onlyUnread) {
@@ -65,7 +89,7 @@ class GetNextChapters(
         fromChapterId: Long,
         onlyUnread: Boolean = true,
     ): List<Chapter> {
-        val chapters = await(mangaId, onlyUnread)
+        val chapters = await(mangaId, onlyUnread/* Azit --> */, keepId = fromChapterId/* Azit <-- */)
         val currChapterIndex = chapters.indexOfFirst { it.id == fromChapterId }
         val nextChapters = chapters.subList(max(0, currChapterIndex), chapters.size)
 

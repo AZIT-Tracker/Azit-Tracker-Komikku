@@ -90,6 +90,7 @@ import tachiyomi.domain.chapter.interactor.UpdateChapter
 import tachiyomi.domain.chapter.model.Chapter
 import tachiyomi.domain.chapter.model.ChapterUpdate
 import tachiyomi.domain.chapter.service.getChapterSort
+import tachiyomi.domain.chapter.service.withoutHiddenChapters
 import tachiyomi.domain.download.service.DownloadPreferences
 import tachiyomi.domain.history.interactor.GetNextChapters
 import tachiyomi.domain.history.interactor.UpsertHistory
@@ -335,7 +336,7 @@ class ReaderViewModel @JvmOverloads constructor(
         // Azit <--
         chaptersForReader
             // Azit -->
-            .filterNot { it.id in hiddenIds && it.id != chapterId }
+            .withoutHiddenChapters(hiddenIds, keepId = chapterId) { it.id }
             // Azit <--
             .sortedWith(getChapterSort(manga, sortDescending = false))
             .run {

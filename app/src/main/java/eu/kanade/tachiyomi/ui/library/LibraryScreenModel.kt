@@ -873,7 +873,14 @@ class LibraryScreenModel(
             getMergedChaptersByMangaId.await(manga.id, applyFilter = true)
         } else {
             getChaptersByMangaId.await(manga.id, applyFilter = true)
-        }.getNextUnread(manga, downloadManager, mergedManga)
+        }.getNextUnread(
+            manga,
+            downloadManager,
+            mergedManga,
+            // Azit -->
+            hiddenChapterIds = Injekt.get<eu.kanade.domain.chapter.interactor.GetHiddenChapters>().await(),
+            // Azit <--
+        )
         // SY <--
     }
 

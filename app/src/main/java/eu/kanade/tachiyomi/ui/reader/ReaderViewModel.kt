@@ -325,7 +325,18 @@ class ReaderViewModel @JvmOverloads constructor(
             else -> chapters
         }
 
+        // Azit -->
+        val hiddenIds = if (manga.showHiddenChapters) {
+            emptySet()
+        } else {
+            // Read in the same background thread as the chapters above.
+            runBlocking { Injekt.get<eu.kanade.domain.chapter.interactor.GetHiddenChapters>().await() }
+        }
+        // Azit <--
         chaptersForReader
+            // Azit -->
+            .filterNot { it.id in hiddenIds && it.id != chapterId }
+            // Azit <--
             .sortedWith(getChapterSort(manga, sortDescending = false))
             .run {
                 if (

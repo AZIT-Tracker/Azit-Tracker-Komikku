@@ -46,6 +46,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -182,6 +183,9 @@ fun MangaScreen(
 
     // For bottom action menu
     onMultiBookmarkClicked: (List<Chapter>, bookmarked: Boolean) -> Unit,
+    // Azit -->
+    onMultiHideClicked: (List<Chapter>, hidden: Boolean) -> Unit,
+    // Azit <--
     onMultiMarkAsReadClicked: (List<Chapter>, markAsRead: Boolean) -> Unit,
     onMarkPreviousAsReadClicked: (Chapter) -> Unit,
     onMultiDeleteClicked: (List<Chapter>) -> Unit,
@@ -256,6 +260,9 @@ fun MangaScreen(
             previewsRowCount = previewsRowCount,
             // SY <--
             onMultiBookmarkClicked = onMultiBookmarkClicked,
+            // Azit -->
+            onMultiHideClicked = onMultiHideClicked,
+            // Azit <--
             onMultiMarkAsReadClicked = onMultiMarkAsReadClicked,
             onMarkPreviousAsReadClicked = onMarkPreviousAsReadClicked,
             onMultiDeleteClicked = onMultiDeleteClicked,
@@ -318,6 +325,9 @@ fun MangaScreen(
             previewsRowCount = previewsRowCount,
             // SY <--
             onMultiBookmarkClicked = onMultiBookmarkClicked,
+            // Azit -->
+            onMultiHideClicked = onMultiHideClicked,
+            // Azit <--
             onMultiMarkAsReadClicked = onMultiMarkAsReadClicked,
             onMarkPreviousAsReadClicked = onMarkPreviousAsReadClicked,
             onMultiDeleteClicked = onMultiDeleteClicked,
@@ -392,6 +402,9 @@ private fun MangaScreenSmallImpl(
 
     // For bottom action menu
     onMultiBookmarkClicked: (List<Chapter>, bookmarked: Boolean) -> Unit,
+    // Azit -->
+    onMultiHideClicked: (List<Chapter>, hidden: Boolean) -> Unit,
+    // Azit <--
     onMultiMarkAsReadClicked: (List<Chapter>, markAsRead: Boolean) -> Unit,
     onMarkPreviousAsReadClicked: (Chapter) -> Unit,
     onMultiDeleteClicked: (List<Chapter>) -> Unit,
@@ -517,6 +530,9 @@ private fun MangaScreenSmallImpl(
             SharedMangaBottomActionMenu(
                 selected = selectedChapters,
                 onMultiBookmarkClicked = onMultiBookmarkClicked,
+                // Azit -->
+                onMultiHideClicked = onMultiHideClicked,
+                // Azit <--
                 onMultiMarkAsReadClicked = onMultiMarkAsReadClicked,
                 onMarkPreviousAsReadClicked = onMarkPreviousAsReadClicked,
                 onDownloadChapter = onDownloadChapter,
@@ -852,6 +868,9 @@ private fun MangaScreenLargeImpl(
 
     // For bottom action menu
     onMultiBookmarkClicked: (List<Chapter>, bookmarked: Boolean) -> Unit,
+    // Azit -->
+    onMultiHideClicked: (List<Chapter>, hidden: Boolean) -> Unit,
+    // Azit <--
     onMultiMarkAsReadClicked: (List<Chapter>, markAsRead: Boolean) -> Unit,
     onMarkPreviousAsReadClicked: (Chapter) -> Unit,
     onMultiDeleteClicked: (List<Chapter>) -> Unit,
@@ -972,6 +991,9 @@ private fun MangaScreenLargeImpl(
                 SharedMangaBottomActionMenu(
                     selected = selectedChapters,
                     onMultiBookmarkClicked = onMultiBookmarkClicked,
+                    // Azit -->
+                    onMultiHideClicked = onMultiHideClicked,
+                    // Azit <--
                     onMultiMarkAsReadClicked = onMultiMarkAsReadClicked,
                     onMarkPreviousAsReadClicked = onMarkPreviousAsReadClicked,
                     onDownloadChapter = onDownloadChapter,
@@ -1245,6 +1267,9 @@ private fun MangaScreenLargeImpl(
 private fun SharedMangaBottomActionMenu(
     selected: List<ChapterList.Item>,
     onMultiBookmarkClicked: (List<Chapter>, bookmarked: Boolean) -> Unit,
+    // Azit -->
+    onMultiHideClicked: (List<Chapter>, hidden: Boolean) -> Unit,
+    // Azit <--
     onMultiMarkAsReadClicked: (List<Chapter>, markAsRead: Boolean) -> Unit,
     onMarkPreviousAsReadClicked: (Chapter) -> Unit,
     onDownloadChapter: ((List<ChapterList.Item>, ChapterDownloadAction) -> Unit)?,
@@ -1280,6 +1305,14 @@ private fun SharedMangaBottomActionMenu(
         }.takeIf {
             selected.fastAny { it.downloadState == Download.State.DOWNLOADED }
         },
+        // Azit -->
+        onHideClicked = {
+            onMultiHideClicked(selected.fastMap { it.chapter }, true)
+        }.takeIf { selected.fastAny { !it.hidden } },
+        onUnhideClicked = {
+            onMultiHideClicked(selected.fastMap { it.chapter }, false)
+        }.takeIf { selected.fastAny { it.hidden } },
+        // Azit <--
     )
 }
 
@@ -1318,6 +1351,9 @@ private fun LazyListScope.sharedChapterItems(
             }
             is ChapterList.Item -> {
                 MangaChapterListItem(
+                    // Azit -->
+                    modifier = if (item.hidden) Modifier.alpha(0.45f) else Modifier,
+                    // Azit <--
                     title = if (manga.displayMode == Manga.CHAPTER_DISPLAY_NUMBER) {
                         stringResource(
                             MR.strings.display_mode_chapter,

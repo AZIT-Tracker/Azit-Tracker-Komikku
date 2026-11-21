@@ -1,0 +1,7 @@
+-- Azit -->
+CREATE TABLE hidden_chapters(
+    chapter_id INTEGER NOT NULL PRIMARY KEY,
+    FOREIGN KEY(chapter_id) REFERENCES chapters (_id)
+    ON DELETE CASCADE
+);
+-- Azit <--

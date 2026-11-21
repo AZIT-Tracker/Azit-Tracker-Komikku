@@ -393,6 +393,9 @@ class MangaScreen(
             // SY <--
             onEditNotesClicked = { navigator.push(MangaNotesScreen(manga = successState.manga)) },
             onMultiBookmarkClicked = screenModel::bookmarkChapters,
+            // Azit -->
+            onMultiHideClicked = screenModel::hideChapters,
+            // Azit <--
             onMultiMarkAsReadClicked = screenModel::markChaptersRead,
             onMarkPreviousAsReadClicked = screenModel::markPreviousChapterRead,
             onMultiDeleteClicked = screenModel::showDeleteChapterDialog,
@@ -534,6 +537,9 @@ class MangaScreen(
                 // Azit -->
                 onHideDuplicatesChanged = screenModel::setHideDuplicates,
                 onDuplicatesKeepLastChanged = screenModel::setDuplicatesKeepLast,
+                hiddenChapterCount = successState.hiddenChapterCount,
+                onShowHiddenChanged = screenModel::setShowHiddenChapters,
+                onUnhideAllClicked = screenModel::unhideAllChapters,
                 // Azit <--
             )
             MangaScreenModel.Dialog.TrackSheet -> {

@@ -308,6 +308,9 @@
     <string name="action_filter_hide_duplicate_chapters">Hide duplicate chapters</string>
     <string name="action_duplicates_keep_first">Show the first uploaded</string>
     <string name="action_duplicates_keep_last">Show the last uploaded</string>
+    <string name="action_hide_chapters">Hide</string>
+    <string name="action_unhide_chapters">Unhide</string>
+    <string name="action_unhide_all_chapters">Unhide all hidden chapters</string>
     <string name="tracking_queue_title">Waiting to be sent</string>
     <string name="pref_show_tracking_queue">Show chapters waiting to be sent</string>
     <string name="pref_show_tracking_queue_summary">The chapters read that a tracker could not receive yet, why, and a button to send them again</string>

@@ -34,6 +34,8 @@ import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.RemoveDone
 import androidx.compose.material.icons.outlined.SwapCalls
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -83,6 +85,10 @@ fun MangaBottomActionMenu(
     onMarkPreviousAsReadClicked: (() -> Unit)? = null,
     onDownloadClicked: (() -> Unit)? = null,
     onDeleteClicked: (() -> Unit)? = null,
+    // Azit -->
+    onHideClicked: (() -> Unit)? = null,
+    onUnhideClicked: (() -> Unit)? = null,
+    // Azit <--
 ) {
     AnimatedVisibility(
         visible = visible,
@@ -96,7 +102,14 @@ fun MangaBottomActionMenu(
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
         ) {
             val haptic = LocalHapticFeedback.current
-            val confirm = remember { mutableStateListOf(false, false, false, false, false, false, false) }
+            val confirm = remember {
+                mutableStateListOf(
+                    false, false, false, false, false, false, false,
+                    // Azit -->
+                    false, false,
+                    // Azit <--
+                )
+            }
             var resetJob by remember { mutableStateOf<Job?>(null) }
             val onLongClickItem: (Int) -> Unit = { toConfirmIndex ->
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -179,6 +192,26 @@ fun MangaBottomActionMenu(
                         onClick = onDeleteClicked,
                     )
                 }
+                // Azit -->
+                if (onHideClicked != null) {
+                    Button(
+                        title = stringResource(KMR.strings.action_hide_chapters),
+                        icon = Icons.Outlined.VisibilityOff,
+                        toConfirm = confirm[7],
+                        onLongClick = { onLongClickItem(7) },
+                        onClick = onHideClicked,
+                    )
+                }
+                if (onUnhideClicked != null) {
+                    Button(
+                        title = stringResource(KMR.strings.action_unhide_chapters),
+                        icon = Icons.Outlined.Visibility,
+                        toConfirm = confirm[8],
+                        onLongClick = { onLongClickItem(8) },
+                        onClick = onUnhideClicked,
+                    )
+                }
+                // Azit <--
             }
         }
     }

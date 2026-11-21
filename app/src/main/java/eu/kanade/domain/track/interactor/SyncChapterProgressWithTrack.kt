@@ -1,5 +1,6 @@
 package eu.kanade.domain.track.interactor
 
+import eu.kanade.domain.chapter.interactor.GetChapterEditions
 import eu.kanade.domain.download.interactor.DeleteDownload
 import eu.kanade.domain.track.model.toDbTrack
 import eu.kanade.domain.track.service.TrackingQueue
@@ -10,6 +11,7 @@ import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.chapter.interactor.GetChaptersByMangaId
 import tachiyomi.domain.chapter.interactor.UpdateChapter
 import tachiyomi.domain.chapter.model.Chapter
+import tachiyomi.domain.chapter.model.ChapterEdition
 import tachiyomi.domain.chapter.model.toChapterUpdate
 import tachiyomi.domain.download.service.DownloadPreferences
 import tachiyomi.domain.manga.interactor.GetManga
@@ -28,6 +30,12 @@ class SyncChapterProgressWithTrack(
     private val deleteDownload: DeleteDownload = Injekt.get(),
     private val getManga: GetManga = Injekt.get(),
     // KMK <--
+    // Azit -->
+    /** The chapters counted as something else (Chapter edition): trackers get their last number. */
+    private val getChapterEditions: suspend (Long) -> Map<Long, ChapterEdition> = { mangaId ->
+        Injekt.get<GetChapterEditions>().await(mangaId)
+    },
+    // Azit <--
 ) {
     /**
      * Sync chapter progress with the [EnhancedTracker]
@@ -59,9 +67,15 @@ class SyncChapterProgressWithTrack(
             .sortedByDescending { it.sourceOrder }
             // KMK <--
             .filter { it.isRecognizedNumber }
+        // Azit -->: an edited chapter counts as the last number given to it
+        val editions = getChapterEditions(mangaId)
+        val numberOf = { chapter: Chapter -> editions[chapter.id]?.trackNumber ?: chapter.chapterNumber }
+        // Azit <--
 
         val sortedChapters = dbChapters
-            .sortedBy { it.chapterNumber }
+            .sortedBy {
+                /* Azit --> */ numberOf(it) /* Azit <-- */
+            }
 
         // KMK -->
         var lastCheckChapter: Double
@@ -76,8 +90,10 @@ class SyncChapterProgressWithTrack(
         val chaptersToMarkRead = dbChapters
             .takeWhile { chapter ->
                 lastCheckChapter = checkingChapter
-                checkingChapter = chapter.chapterNumber
-                chapter.chapterNumber >= lastCheckChapter && chapter.chapterNumber <= remoteTrack.lastChapterRead
+                // Azit -->
+                checkingChapter = numberOf(chapter)
+                checkingChapter >= lastCheckChapter && checkingChapter <= remoteTrack.lastChapterRead
+                // Azit <--
             }
             .filter { chapter -> !chapter.read }
         val chapterUpdates = chaptersToMarkRead
@@ -85,7 +101,10 @@ class SyncChapterProgressWithTrack(
             .map { it.copy(read = true).toChapterUpdate() }
 
         // only take into account continuous reading
-        val localLastRead = sortedChapters.takeWhile { it.read }.lastOrNull()?.chapterNumber ?: 0F
+        val localLastRead = sortedChapters.takeWhile { it.read }.lastOrNull()
+            ?.let {
+                /* Azit --> */ numberOf(it) /* Azit <-- */
+            } ?: 0F
         // Tracker will update to latest read chapter
         val lastRead = max(remoteTrack.lastChapterRead, localLastRead.toDouble())
         val updatedTrack = remoteTrack.copy(lastChapterRead = lastRead)

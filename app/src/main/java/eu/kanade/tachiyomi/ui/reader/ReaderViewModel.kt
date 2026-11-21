@@ -1448,7 +1448,12 @@ class ReaderViewModel @JvmOverloads constructor(
         val context = Injekt.get<Application>()
 
         viewModelScope.launchNonCancellable {
-            trackChapter.await(context, manga.id, readerChapter.chapter.chapter_number.toDouble())
+            // Azit -->: an edited chapter (Chapter edition) counts as the last number given to it
+            val editions = Injekt.get<eu.kanade.domain.chapter.interactor.GetChapterEditions>().await(manga.id)
+            val number = readerChapter.chapter.id?.let { editions[it] }?.trackNumber
+                ?: readerChapter.chapter.chapter_number.toDouble()
+            trackChapter.await(context, manga.id, number)
+            // Azit <--
         }
     }
 

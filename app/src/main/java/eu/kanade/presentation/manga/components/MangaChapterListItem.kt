@@ -68,6 +68,10 @@ fun MangaChapterListItem(
     onDownloadClick: ((ChapterDownloadAction) -> Unit)?,
     onChapterSwipe: (LibraryPreferences.ChapterSwipeAction) -> Unit,
     modifier: Modifier = Modifier,
+    // Azit -->
+    /** What the chapter counts as (Chapter edition), shown after the name in grey: "(Ch. 3)", or "(Ch. 2-4)" for a volume. */
+    editionLabel: String? = null,
+    // Azit <--
 ) {
     // KMK -->
     val swipeBackground = MaterialTheme.colorScheme.primaryContainer
@@ -146,7 +150,21 @@ fun MangaChapterListItem(
                         overflow = TextOverflow.Ellipsis,
                         onTextLayout = { textHeight = it.size.height },
                         color = LocalContentColor.current.copy(alpha = if (read) DISABLED_ALPHA else 1f),
+                        // Azit -->: the name shrinks first, the edition stays visible
+                        modifier = Modifier.weight(1f, fill = false),
+                        // Azit <--
                     )
+                    // Azit -->
+                    if (editionLabel != null) {
+                        Text(
+                            text = editionLabel,
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1,
+                            color = LocalContentColor.current.copy(alpha = if (read) DISABLED_ALPHA else SECONDARY_ALPHA),
+                            modifier = Modifier.padding(start = 4.dp),
+                        )
+                    }
+                    // Azit <--
                 }
 
                 Row {

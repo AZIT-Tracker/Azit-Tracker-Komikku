@@ -185,6 +185,8 @@ fun MangaScreen(
     onMultiBookmarkClicked: (List<Chapter>, bookmarked: Boolean) -> Unit,
     // Azit -->
     onMultiHideClicked: (List<Chapter>, hidden: Boolean) -> Unit,
+    onEditChaptersClicked: (List<Chapter>) -> Unit,
+    onClearChapterEditionClicked: (List<Chapter>) -> Unit,
     // Azit <--
     onMultiMarkAsReadClicked: (List<Chapter>, markAsRead: Boolean) -> Unit,
     onMarkPreviousAsReadClicked: (Chapter) -> Unit,
@@ -262,6 +264,8 @@ fun MangaScreen(
             onMultiBookmarkClicked = onMultiBookmarkClicked,
             // Azit -->
             onMultiHideClicked = onMultiHideClicked,
+            onEditChaptersClicked = onEditChaptersClicked,
+            onClearChapterEditionClicked = onClearChapterEditionClicked,
             // Azit <--
             onMultiMarkAsReadClicked = onMultiMarkAsReadClicked,
             onMarkPreviousAsReadClicked = onMarkPreviousAsReadClicked,
@@ -327,6 +331,8 @@ fun MangaScreen(
             onMultiBookmarkClicked = onMultiBookmarkClicked,
             // Azit -->
             onMultiHideClicked = onMultiHideClicked,
+            onEditChaptersClicked = onEditChaptersClicked,
+            onClearChapterEditionClicked = onClearChapterEditionClicked,
             // Azit <--
             onMultiMarkAsReadClicked = onMultiMarkAsReadClicked,
             onMarkPreviousAsReadClicked = onMarkPreviousAsReadClicked,
@@ -404,6 +410,8 @@ private fun MangaScreenSmallImpl(
     onMultiBookmarkClicked: (List<Chapter>, bookmarked: Boolean) -> Unit,
     // Azit -->
     onMultiHideClicked: (List<Chapter>, hidden: Boolean) -> Unit,
+    onEditChaptersClicked: (List<Chapter>) -> Unit,
+    onClearChapterEditionClicked: (List<Chapter>) -> Unit,
     // Azit <--
     onMultiMarkAsReadClicked: (List<Chapter>, markAsRead: Boolean) -> Unit,
     onMarkPreviousAsReadClicked: (Chapter) -> Unit,
@@ -532,6 +540,8 @@ private fun MangaScreenSmallImpl(
                 onMultiBookmarkClicked = onMultiBookmarkClicked,
                 // Azit -->
                 onMultiHideClicked = onMultiHideClicked,
+                onEditChaptersClicked = onEditChaptersClicked,
+                onClearChapterEditionClicked = onClearChapterEditionClicked,
                 // Azit <--
                 onMultiMarkAsReadClicked = onMultiMarkAsReadClicked,
                 onMarkPreviousAsReadClicked = onMarkPreviousAsReadClicked,
@@ -870,6 +880,8 @@ private fun MangaScreenLargeImpl(
     onMultiBookmarkClicked: (List<Chapter>, bookmarked: Boolean) -> Unit,
     // Azit -->
     onMultiHideClicked: (List<Chapter>, hidden: Boolean) -> Unit,
+    onEditChaptersClicked: (List<Chapter>) -> Unit,
+    onClearChapterEditionClicked: (List<Chapter>) -> Unit,
     // Azit <--
     onMultiMarkAsReadClicked: (List<Chapter>, markAsRead: Boolean) -> Unit,
     onMarkPreviousAsReadClicked: (Chapter) -> Unit,
@@ -993,6 +1005,8 @@ private fun MangaScreenLargeImpl(
                     onMultiBookmarkClicked = onMultiBookmarkClicked,
                     // Azit -->
                     onMultiHideClicked = onMultiHideClicked,
+                    onEditChaptersClicked = onEditChaptersClicked,
+                    onClearChapterEditionClicked = onClearChapterEditionClicked,
                     // Azit <--
                     onMultiMarkAsReadClicked = onMultiMarkAsReadClicked,
                     onMarkPreviousAsReadClicked = onMarkPreviousAsReadClicked,
@@ -1269,6 +1283,8 @@ private fun SharedMangaBottomActionMenu(
     onMultiBookmarkClicked: (List<Chapter>, bookmarked: Boolean) -> Unit,
     // Azit -->
     onMultiHideClicked: (List<Chapter>, hidden: Boolean) -> Unit,
+    onEditChaptersClicked: (List<Chapter>) -> Unit,
+    onClearChapterEditionClicked: (List<Chapter>) -> Unit,
     // Azit <--
     onMultiMarkAsReadClicked: (List<Chapter>, markAsRead: Boolean) -> Unit,
     onMarkPreviousAsReadClicked: (Chapter) -> Unit,
@@ -1312,6 +1328,10 @@ private fun SharedMangaBottomActionMenu(
         onUnhideClicked = {
             onMultiHideClicked(selected.fastMap { it.chapter }, false)
         }.takeIf { selected.fastAny { it.hidden } },
+        onEditChaptersClicked = { onEditChaptersClicked(selected.fastMap { it.chapter }) },
+        onClearChapterEditionClicked = {
+            onClearChapterEditionClicked(selected.fastMap { it.chapter })
+        }.takeIf { selected.fastAny { it.edition != null } },
         // Azit <--
     )
 }
@@ -1353,6 +1373,10 @@ private fun LazyListScope.sharedChapterItems(
                 MangaChapterListItem(
                     // Azit -->
                     modifier = if (item.hidden) Modifier.alpha(0.45f) else Modifier,
+                    // A volume's numbers are the chapters it holds: "(Ch. 2-4)" too
+                    editionLabel = item.edition?.let { edition ->
+                        stringResource(KMR.strings.chapter_edition_chapter_label, edition.numberText)
+                    },
                     // Azit <--
                     title = if (manga.displayMode == Manga.CHAPTER_DISPLAY_NUMBER) {
                         stringResource(

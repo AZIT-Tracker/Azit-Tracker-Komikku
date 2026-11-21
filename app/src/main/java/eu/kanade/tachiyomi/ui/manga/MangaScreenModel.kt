@@ -126,6 +126,7 @@ import tachiyomi.domain.chapter.interactor.GetMergedChaptersByMangaId
 import tachiyomi.domain.chapter.interactor.SetMangaDefaultChapterFlags
 import tachiyomi.domain.chapter.interactor.UpdateChapter
 import tachiyomi.domain.chapter.model.Chapter
+import tachiyomi.domain.chapter.model.ChapterEdition
 import tachiyomi.domain.chapter.model.ChapterUpdate
 import tachiyomi.domain.chapter.model.NoChaptersException
 import tachiyomi.domain.chapter.service.calculateChapterGap
@@ -217,6 +218,8 @@ class MangaScreenModel(
     // Azit -->
     private val getHiddenChapters: eu.kanade.domain.chapter.interactor.GetHiddenChapters = Injekt.get(),
     private val setChaptersHidden: eu.kanade.domain.chapter.interactor.SetChaptersHidden = Injekt.get(),
+    private val getChapterEditions: eu.kanade.domain.chapter.interactor.GetChapterEditions = Injekt.get(),
+    private val setChapterEditions: eu.kanade.domain.chapter.interactor.SetChapterEditions = Injekt.get(),
     // Azit <--
     private val setExcludedScanlators: SetExcludedScanlators = Injekt.get(),
     private val setMangaChapterFlags: SetMangaChapterFlags = Injekt.get(),
@@ -279,6 +282,10 @@ class MangaScreenModel(
     /** Chapters hidden one by one (every series): kept on each list item as [ChapterList.Item.hidden]. */
     @Volatile
     private var hiddenChapterIds: Set<Long> = emptySet()
+
+    /** Chapters of this series counted as something else (Chapter edition): kept as [ChapterList.Item.edition]. */
+    @Volatile
+    private var chapterEditions: Map<Long, ChapterEdition> = emptyMap()
     // Azit <--
 
     internal var showTrackDialogAfterCategorySelection: Boolean = false
@@ -412,6 +419,17 @@ class MangaScreenModel(
                     hiddenChapterIds = hidden
                     updateSuccessState { state ->
                         state.copy(chapters = state.chapters.map { it.copy(hidden = it.id in hidden) })
+                    }
+                }
+        }
+        screenModelScope.launchIO {
+            getChapterEditions.subscribe(mangaId)
+                .flowWithLifecycle(lifecycle)
+                .distinctUntilChanged()
+                .collectLatest { editions ->
+                    chapterEditions = editions
+                    updateSuccessState { state ->
+                        state.copy(chapters = state.chapters.map { it.copy(edition = editions[it.id]) })
                     }
                 }
         }
@@ -1140,6 +1158,7 @@ class MangaScreenModel(
                 selected = chapter.id in selectedChapterIds,
                 // Azit -->
                 hidden = chapter.id in hiddenChapterIds,
+                edition = chapterEditions[chapter.id],
                 // Azit <--
                 // SY -->
                 sourceName = source?.getNameForMangaInfo(),
@@ -1412,7 +1431,9 @@ class MangaScreenModel(
             refreshTrackers()
 
             val tracks = getTracks.await(mangaId)
-            val maxChapterNumber = chapters.maxOf { it.chapterNumber }
+            // Azit -->: an edited chapter (Chapter edition) counts as the last number given to it
+            val maxChapterNumber = getChapterEditions.applyTo(mangaId, chapters).maxOf { it.chapterNumber }
+            // Azit <--
             val shouldPromptTrackingUpdate = tracks.any { track -> maxChapterNumber > track.lastChapterRead }
 
             if (!shouldPromptTrackingUpdate) return@launchIO
@@ -1510,6 +1531,26 @@ class MangaScreenModel(
     fun unhideAllChapters() {
         val state = successState ?: return
         hideChapters(state.chapters.filter { it.hidden }.map { it.chapter }, hidden = false)
+    }
+
+    /** Opens Chapter edition for the selected chapters, in reading order (first chapter first). */
+    fun showChapterEditionDialog(chapters: List<Chapter>) {
+        if (chapters.isEmpty()) return
+        val ordered = chapters.sortedByDescending { it.sourceOrder }
+        updateSuccessState { it.copy(dialog = Dialog.ChapterEdition(ordered, chapterEditions)) }
+    }
+
+    /** Saves Chapter edition: [editions] kept, the chapters in [cleared] counted as themselves again. */
+    fun saveChapterEditions(editions: List<ChapterEdition>, cleared: List<Long>) {
+        screenModelScope.launchIO {
+            setChapterEditions.await(editions, cleared)
+        }
+        toggleAllSelection(false)
+    }
+
+    /** The selected chapters are counted as themselves again. */
+    fun clearChapterEditions(chapters: List<Chapter>) {
+        saveChapterEditions(emptyList(), chapters.map { it.id })
     }
     // Azit <--
 
@@ -1960,6 +2001,13 @@ class MangaScreenModel(
             val initialSelection: ImmutableList<CheckboxState<Category>>,
         ) : Dialog
         data class DeleteChapters(val chapters: List<Chapter>) : Dialog
+
+        // Azit -->
+        data class ChapterEdition(
+            val chapters: List<Chapter>,
+            val editions: Map<Long, tachiyomi.domain.chapter.model.ChapterEdition>,
+        ) : Dialog
+        // Azit <--
         data class DuplicateManga(val manga: Manga, val duplicates: List<MangaWithChapterCount>) : Dialog
         data class Migrate(val target: Manga, val current: Manga) : Dialog
         data class SetFetchInterval(val manga: Manga) : Dialog
@@ -2202,6 +2250,9 @@ sealed class ChapterList {
         // Azit -->
         /** Hidden one by one (selection menu -> Hide): left out of the list unless the filter shows them. */
         val hidden: Boolean = false,
+
+        /** Counted as another chapter number or as a volume (Chapter edition); trackers get its last number. */
+        val edition: ChapterEdition? = null,
         // Azit <--
         // SY -->
         val sourceName: String?,

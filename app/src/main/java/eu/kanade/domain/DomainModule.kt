@@ -127,7 +127,12 @@ class DomainModule : InjektModule {
         addFactory { GetMangaWithChapters(get(), get()) }
         addFactory { GetMangaByUrlAndSourceId(get()) }
         addFactory { GetManga(get()) }
-        addFactory { GetNextChapters(get(), get(), get(), get()) }
+        addFactory {
+            // Azit -->
+            val hiddenChapters = get<eu.kanade.domain.chapter.interactor.GetHiddenChapters>()
+            // Azit <--
+            GetNextChapters(get(), get(), get(), get()/* Azit --> */, getHiddenChapterIds = { hiddenChapters.await() } /* Azit <-- */)
+        }
         addFactory { GetUpcomingManga(get()) }
         addFactory { ResetViewerFlags(get()) }
         addFactory { SetMangaChapterFlags(get()) }

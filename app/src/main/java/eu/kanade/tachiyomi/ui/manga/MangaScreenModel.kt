@@ -68,6 +68,7 @@ import eu.kanade.tachiyomi.ui.manga.RelatedManga.Companion.sorted
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.util.chapter.getNextUnread
 import eu.kanade.tachiyomi.util.chapter.keepOneChapterEach
+import eu.kanade.tachiyomi.util.chapter.visibleChapters
 import eu.kanade.tachiyomi.util.removeCovers
 import eu.kanade.tachiyomi.util.system.getBitmapOrNull
 import eu.kanade.tachiyomi.util.system.toast
@@ -2164,12 +2165,7 @@ class MangaScreenModel(
                 val bookmarkedFilter = manga.bookmarkedFilter
                 // Azit -->: chapters hidden one by one go first (a hidden copy never stands for its duplicates), then
                 // duplicates, so a filter can't bring back a copy that is hidden.
-                val shown = if (manga.showHiddenChapters) this else filterNot { it.hidden }
-                val chapters = if (manga.hideDuplicateChapters) {
-                    shown.keepOneChapterEach(manga.duplicatesKeepLast) { it.chapter }
-                } else {
-                    shown
-                }
+                val chapters = visibleChapters(manga, filter { it.hidden }.mapTo(HashSet()) { it.id }) { it.chapter }
                 return chapters.asSequence()
                     // Azit <--
                     .filter { (chapter) -> applyFilter(unreadFilter) { !chapter.read } }

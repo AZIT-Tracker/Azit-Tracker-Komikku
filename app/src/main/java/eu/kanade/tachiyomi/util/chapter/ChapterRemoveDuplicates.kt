@@ -1,6 +1,8 @@
 package eu.kanade.tachiyomi.util.chapter
 
 import tachiyomi.domain.chapter.model.Chapter
+import tachiyomi.domain.chapter.service.withoutHiddenChapters
+import tachiyomi.domain.manga.model.Manga
 
 /**
  * Returns a copy of the list with duplicate chapters removed
@@ -34,5 +36,16 @@ fun <T> List<T>.keepOneChapterEach(keepLast: Boolean, chapterOf: (T) -> Chapter)
         .values
         .forEach { copies -> kept += copies.minWith(order).id }
     return filter { chapterOf(it).let { chapter -> chapter.chapterNumber < 0 || chapter.id in kept } }
+}
+// Azit <--
+
+// Azit -->
+/**
+ * The chapters a series' list shows before the other filters: the ones hidden one by one go first (a hidden copy
+ * never stands for its duplicates), then one copy per chapter number with "Hide duplicate chapters".
+ */
+fun <T> List<T>.visibleChapters(manga: Manga, hiddenIds: Set<Long>, chapterOf: (T) -> Chapter): List<T> {
+    val shown = withoutHiddenChapters(hiddenIds, manga.showHiddenChapters) { chapterOf(it).id }
+    return if (manga.hideDuplicateChapters) shown.keepOneChapterEach(manga.duplicatesKeepLast, chapterOf) else shown
 }
 // Azit <--

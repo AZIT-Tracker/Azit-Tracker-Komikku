@@ -3,7 +3,7 @@ package eu.kanade.domain.chapter.model
 import eu.kanade.domain.manga.model.downloadedFilter
 import eu.kanade.tachiyomi.data.download.DownloadManager
 import eu.kanade.tachiyomi.ui.manga.ChapterList
-import eu.kanade.tachiyomi.util.chapter.keepOneChapterEach
+import eu.kanade.tachiyomi.util.chapter.visibleChapters
 import tachiyomi.domain.chapter.model.Chapter
 import tachiyomi.domain.chapter.service.getChapterSort
 import tachiyomi.domain.manga.model.Manga
@@ -20,6 +20,9 @@ fun List<Chapter>.applyFilters(
     // SY -->
     mergedManga: Map<Long, Manga>,
     // SY <--
+    // Azit -->
+    hiddenChapterIds: Set<Long> = emptySet(),
+    // Azit <--
 ): List<Chapter> {
     val isLocalManga = manga.isLocal()
     val unreadFilter = manga.unreadFilter
@@ -27,7 +30,7 @@ fun List<Chapter>.applyFilters(
     val bookmarkedFilter = manga.bookmarkedFilter
 
     // Azit -->
-    val chapters = if (manga.hideDuplicateChapters) keepOneChapterEach(manga.duplicatesKeepLast) { it } else this
+    val chapters = visibleChapters(manga, hiddenChapterIds) { it }
     // Azit <--
 
     return chapters.filter { chapter -> applyFilter(unreadFilter) { !chapter.read } }
@@ -63,7 +66,7 @@ fun List<ChapterList.Item>.applyFilters(manga: Manga): Sequence<ChapterList.Item
     val downloadedFilter = manga.downloadedFilter
     val bookmarkedFilter = manga.bookmarkedFilter
     // Azit -->
-    val chapters = if (manga.hideDuplicateChapters) keepOneChapterEach(manga.duplicatesKeepLast) { it.chapter } else this
+    val chapters = visibleChapters(manga, filter { it.hidden }.mapTo(HashSet()) { it.id }) { it.chapter }
     return chapters.asSequence()
         // Azit <--
         .filter { (chapter) -> applyFilter(unreadFilter) { !chapter.read } }

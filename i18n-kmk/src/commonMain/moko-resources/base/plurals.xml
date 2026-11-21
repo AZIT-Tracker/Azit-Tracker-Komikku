@@ -1,3 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <plurals name="action_filter_show_hidden_chapters">
+        <item quantity="one">Show the hidden chapter (%d)</item>
+        <item quantity="other">Show hidden chapters (%d)</item>
+    </plurals>
 </resources>

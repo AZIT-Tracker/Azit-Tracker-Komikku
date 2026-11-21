@@ -123,6 +123,10 @@ data class Manga(
     /** Of the duplicates, show the last uploaded one instead of the first. */
     val duplicatesKeepLast: Boolean
         get() = chapterFlags and CHAPTER_DUPLICATES_KEEP_LAST != 0L
+
+    /** Show the chapters hidden one by one again (filter sheet), instead of leaving them out. */
+    val showHiddenChapters: Boolean
+        get() = chapterFlags and CHAPTER_SHOW_HIDDEN != 0L
     // Azit <--
 
     fun sortDescending(): Boolean {
@@ -162,6 +166,7 @@ data class Manga(
         // Azit -->
         const val CHAPTER_HIDE_DUPLICATES = 0x00200000L
         const val CHAPTER_DUPLICATES_KEEP_LAST = 0x00400000L
+        const val CHAPTER_SHOW_HIDDEN = 0x00800000L
         // Azit <--
 
         fun create() = Manga(

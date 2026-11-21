@@ -48,6 +48,18 @@ class SetMangaChapterFlags(
         )
     }
 
+    suspend fun awaitSetShowHidden(manga: Manga, show: Boolean): Boolean {
+        return mangaRepository.update(
+            MangaUpdate(
+                id = manga.id,
+                chapterFlags = manga.chapterFlags.setFlag(
+                    if (show) Manga.CHAPTER_SHOW_HIDDEN else 0L,
+                    Manga.CHAPTER_SHOW_HIDDEN,
+                ),
+            ),
+        )
+    }
+
     suspend fun awaitSetDuplicatesKeepLast(manga: Manga, keepLast: Boolean): Boolean {
         return mangaRepository.update(
             MangaUpdate(

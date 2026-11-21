@@ -185,8 +185,13 @@ class UpdatesScreenModel(
      */
     private suspend fun List<UpdatesWithRelations>.withoutHiddenDuplicates(): List<UpdatesWithRelations> {
         val hidden = HashSet<Long>()
+        // Chapters hidden one by one too (selection menu -> Hide), unless their series shows them.
+        val hiddenOneByOne = Injekt.get<eu.kanade.domain.chapter.interactor.GetHiddenChapters>().await()
         map { it.mangaId }.distinct().forEach { mangaId ->
             val manga = getManga.await(mangaId) ?: return@forEach
+            if (!manga.showHiddenChapters) {
+                filter { it.mangaId == mangaId && it.chapterId in hiddenOneByOne }.forEach { hidden += it.chapterId }
+            }
             if (!manga.hideDuplicateChapters) return@forEach
             val chapters = getChaptersByMangaId.await(mangaId, applyFilter = true)
             val visible = chapters.keepOneChapterEach(manga.duplicatesKeepLast) { it }.mapTo(HashSet()) { it.id }

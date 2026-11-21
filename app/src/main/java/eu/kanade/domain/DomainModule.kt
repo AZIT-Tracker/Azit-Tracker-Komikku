@@ -140,6 +140,10 @@ class DomainModule : InjektModule {
         addFactory { SetMangaCategories(get()) }
         addFactory { GetExcludedScanlators(get()) }
         addFactory { SetExcludedScanlators(get()) }
+        // Azit -->
+        addFactory { eu.kanade.domain.chapter.interactor.GetHiddenChapters(get()) }
+        addFactory { eu.kanade.domain.chapter.interactor.SetChaptersHidden(get()) }
+        // Azit <--
         addFactory {
             MigrateMangaUseCase(
                 get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(),

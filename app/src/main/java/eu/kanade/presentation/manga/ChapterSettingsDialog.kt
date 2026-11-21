@@ -41,6 +41,7 @@ import tachiyomi.presentation.core.components.LabeledCheckbox
 import tachiyomi.presentation.core.components.RadioItem
 import tachiyomi.presentation.core.components.SortItem
 import tachiyomi.presentation.core.components.TriStateItem
+import tachiyomi.presentation.core.i18n.pluralStringResource
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.theme.active
 import uy.kohesive.injekt.Injekt
@@ -58,6 +59,9 @@ fun ChapterSettingsDialog(
     // Azit -->
     onHideDuplicatesChanged: (Boolean) -> Unit,
     onDuplicatesKeepLastChanged: (Boolean) -> Unit,
+    hiddenChapterCount: Int = 0,
+    onShowHiddenChanged: (Boolean) -> Unit = {},
+    onUnhideAllClicked: () -> Unit = {},
     // Azit <--
     onSortModeChanged: (Long) -> Unit,
     onDisplayModeChanged: (Long) -> Unit,
@@ -120,6 +124,10 @@ fun ChapterSettingsDialog(
                         onHideDuplicatesChanged = onHideDuplicatesChanged,
                         duplicatesKeepLast = manga?.duplicatesKeepLast ?: false,
                         onDuplicatesKeepLastChanged = onDuplicatesKeepLastChanged,
+                        hiddenChapterCount = hiddenChapterCount,
+                        showHidden = manga?.showHiddenChapters ?: false,
+                        onShowHiddenChanged = onShowHiddenChanged,
+                        onUnhideAllClicked = onUnhideAllClicked,
                         // Azit <--
                     )
                 }
@@ -156,6 +164,10 @@ private fun ColumnScope.FilterPage(
     onHideDuplicatesChanged: (Boolean) -> Unit,
     duplicatesKeepLast: Boolean,
     onDuplicatesKeepLastChanged: (Boolean) -> Unit,
+    hiddenChapterCount: Int,
+    showHidden: Boolean,
+    onShowHiddenChanged: (Boolean) -> Unit,
+    onUnhideAllClicked: () -> Unit,
     // Azit <--
 ) {
     TriStateItem(
@@ -190,6 +202,20 @@ private fun ColumnScope.FilterPage(
             selected = duplicatesKeepLast,
             onClick = { onDuplicatesKeepLastChanged(true) },
         )
+    }
+    // Chapters hidden one by one (selection menu -> Hide): shown again here, or all unhidden.
+    if (hiddenChapterCount > 0) {
+        CheckboxItem(
+            label = pluralStringResource(KMR.plurals.action_filter_show_hidden_chapters, hiddenChapterCount, hiddenChapterCount),
+            checked = showHidden,
+            onClick = { onShowHiddenChanged(!showHidden) },
+        )
+        TextButton(
+            onClick = onUnhideAllClicked,
+            modifier = Modifier.padding(horizontal = TabbedDialogPaddings.Horizontal),
+        ) {
+            Text(stringResource(KMR.strings.action_unhide_all_chapters))
+        }
     }
     // Azit <--
     ScanlatorFilterItem(

@@ -1,0 +1,20 @@
+-- Azit -->
+-- Chapters the reader hid one by one from a series' chapter list (selection menu -> Hide).
+CREATE TABLE hidden_chapters(
+    chapter_id INTEGER NOT NULL PRIMARY KEY,
+    FOREIGN KEY(chapter_id) REFERENCES chapters (_id)
+    ON DELETE CASCADE
+);
+
+getAll:
+SELECT chapter_id
+FROM hidden_chapters;
+
+insert:
+INSERT OR IGNORE INTO hidden_chapters(chapter_id)
+VALUES (:chapterId);
+
+remove:
+DELETE FROM hidden_chapters
+WHERE chapter_id IN :chapterIds;
+-- Azit <--

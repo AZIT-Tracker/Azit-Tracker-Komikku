@@ -213,6 +213,10 @@ class MangaScreenModel(
     private val getDuplicateLibraryManga: GetDuplicateLibraryManga = Injekt.get(),
     private val getAvailableScanlators: GetAvailableScanlators = Injekt.get(),
     private val getExcludedScanlators: GetExcludedScanlators = Injekt.get(),
+    // Azit -->
+    private val getHiddenChapters: eu.kanade.domain.chapter.interactor.GetHiddenChapters = Injekt.get(),
+    private val setChaptersHidden: eu.kanade.domain.chapter.interactor.SetChaptersHidden = Injekt.get(),
+    // Azit <--
     private val setExcludedScanlators: SetExcludedScanlators = Injekt.get(),
     private val setMangaChapterFlags: SetMangaChapterFlags = Injekt.get(),
     private val setMangaDefaultChapterFlags: SetMangaDefaultChapterFlags = Injekt.get(),
@@ -269,6 +273,12 @@ class MangaScreenModel(
 
     private val selectedPositions: Array<Int> = arrayOf(-1, -1) // first and last selected index in list
     private val selectedChapterIds: HashSet<Long> = HashSet()
+
+    // Azit -->
+    /** Chapters hidden one by one (every series): kept on each list item as [ChapterList.Item.hidden]. */
+    @Volatile
+    private var hiddenChapterIds: Set<Long> = emptySet()
+    // Azit <--
 
     internal var showTrackDialogAfterCategorySelection: Boolean = false
 
@@ -391,6 +401,20 @@ class MangaScreenModel(
                     }
                 }
         }
+
+        // Azit -->
+        screenModelScope.launchIO {
+            getHiddenChapters.subscribe()
+                .flowWithLifecycle(lifecycle)
+                .distinctUntilChanged()
+                .collectLatest { hidden ->
+                    hiddenChapterIds = hidden
+                    updateSuccessState { state ->
+                        state.copy(chapters = state.chapters.map { it.copy(hidden = it.id in hidden) })
+                    }
+                }
+        }
+        // Azit <--
 
         screenModelScope.launchIO {
             getExcludedScanlators.subscribe(mangaId)
@@ -1113,6 +1137,9 @@ class MangaScreenModel(
                 downloadState = downloadState,
                 downloadProgress = activeDownload?.progress ?: 0,
                 selected = chapter.id in selectedChapterIds,
+                // Azit -->
+                hidden = chapter.id in hiddenChapterIds,
+                // Azit <--
                 // SY -->
                 sourceName = source?.getNameForMangaInfo(),
                 showScanlator = !isExhManga,
@@ -1469,6 +1496,22 @@ class MangaScreenModel(
         toggleAllSelection(false)
     }
 
+    // Azit -->
+    /** Hides the given chapters from the series' chapter list, or shows them again. */
+    fun hideChapters(chapters: List<Chapter>, hidden: Boolean) {
+        screenModelScope.launchIO {
+            setChaptersHidden.await(chapters.map { it.id }, hidden)
+        }
+        toggleAllSelection(false)
+    }
+
+    /** Every chapter of this series hidden one by one shows again. */
+    fun unhideAllChapters() {
+        val state = successState ?: return
+        hideChapters(state.chapters.filter { it.hidden }.map { it.chapter }, hidden = false)
+    }
+    // Azit <--
+
     /**
      * Deletes the given list of chapter.
      *
@@ -1672,6 +1715,13 @@ class MangaScreenModel(
         val manga = successState?.manga ?: return
         screenModelScope.launchNonCancellable {
             setMangaChapterFlags.awaitSetDuplicatesKeepLast(manga, keepLast)
+        }
+    }
+
+    fun setShowHiddenChapters(show: Boolean) {
+        val manga = successState?.manga ?: return
+        screenModelScope.launchNonCancellable {
+            setMangaChapterFlags.awaitSetShowHidden(manga, show)
         }
     }
     // Azit <--
@@ -2092,8 +2142,16 @@ class MangaScreenModel(
             val scanlatorFilterActive: Boolean
                 get() = excludedScanlators.intersect(availableScanlators).isNotEmpty()
 
+            // Azit -->
+            /** How many chapters of this series are hidden one by one. */
+            val hiddenChapterCount by lazy { chapters.count { it.hidden } }
+            // Azit <--
+
             val filterActive: Boolean
-                get() = scanlatorFilterActive || manga.chaptersFiltered()
+                get() = scanlatorFilterActive || manga.chaptersFiltered() ||
+                    // Azit -->
+                    (hiddenChapterCount > 0 && !manga.showHiddenChapters)
+            // Azit <--
 
             /**
              * Applies the view filters to the list of chapters obtained from the database.
@@ -2104,11 +2162,13 @@ class MangaScreenModel(
                 val unreadFilter = manga.unreadFilter
                 val downloadedFilter = manga.downloadedFilter
                 val bookmarkedFilter = manga.bookmarkedFilter
-                // Azit -->: duplicates go first, so a filter can't bring back a copy that is hidden.
+                // Azit -->: chapters hidden one by one go first (a hidden copy never stands for its duplicates), then
+                // duplicates, so a filter can't bring back a copy that is hidden.
+                val shown = if (manga.showHiddenChapters) this else filterNot { it.hidden }
                 val chapters = if (manga.hideDuplicateChapters) {
-                    keepOneChapterEach(manga.duplicatesKeepLast) { it.chapter }
+                    shown.keepOneChapterEach(manga.duplicatesKeepLast) { it.chapter }
                 } else {
-                    this
+                    shown
                 }
                 return chapters.asSequence()
                     // Azit <--
@@ -2143,6 +2203,10 @@ sealed class ChapterList {
         val downloadState: Download.State,
         val downloadProgress: Int,
         val selected: Boolean = false,
+        // Azit -->
+        /** Hidden one by one (selection menu -> Hide): left out of the list unless the filter shows them. */
+        val hidden: Boolean = false,
+        // Azit <--
         // SY -->
         val sourceName: String?,
         val showScanlator: Boolean,

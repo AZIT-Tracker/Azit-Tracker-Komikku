@@ -27,6 +27,19 @@ object AzitMapping {
     /** Remote id of the "Create in Azit" search result: binding it always creates a new title. */
     const val CREATE_REMOTE_ID = -1L
 
+    // KMK -->
+    /**
+     * The status to send when the chapters read are changed by hand (tracking sheet). A completed entry brought below
+     * its chapter count is no longer completed: back to reading, or to plan to read at chapter 0 (Azit would otherwise
+     * keep it completed and put the chapters back to the full count).
+     */
+    fun statusAfterChapterEdit(status: Long, chapter: Double, totalChapters: Long): Long {
+        if (status != COMPLETED) return status
+        if (chapter <= 0) return PLAN_TO_READ
+        return if (totalChapters > 0 && chapter < totalChapters) READING else status
+    }
+    // KMK <--
+
     /** Komikku status → Azit `EntryStatus`. */
     fun toAzitStatus(status: Long): String? = when (status) {
         READING -> "current"

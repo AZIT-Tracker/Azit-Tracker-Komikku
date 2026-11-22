@@ -97,11 +97,28 @@ android {
 
             matchingFallbacks.addAll(commonMatchingFallbacks)
         }
+        // KMK -->
+        // The Azit build for the phone: optimized like a release (much smoother than debug), yet the same app as the
+        // debug build (same id and key: it installs over it and keeps the library) and the same in-app behavior.
+        create("azit") {
+            initWith(release)
+
+            applicationIdSuffix = debug.applicationIdSuffix
+            versionNameSuffix = debug.versionNameSuffix
+            signingConfig = debug.signingConfig
+            isDebuggable = false
+
+            matchingFallbacks.addAll(commonMatchingFallbacks)
+        }
+        // KMK <--
     }
 
     sourceSets {
         getByName("preview").res.srcDirs("src/beta/res")
         getByName("benchmark").res.srcDirs("src/debug/res")
+        // KMK -->
+        getByName("azit").res.srcDirs("src/debug/res")
+        // KMK <--
     }
 
     splits {

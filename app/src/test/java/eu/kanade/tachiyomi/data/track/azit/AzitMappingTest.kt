@@ -107,4 +107,29 @@ class AzitMappingTest {
         track.finished_reading_date shouldBe 0
         track.tracking_url shouldBe "http://azit.test:8080/media/42"
     }
+
+    // KMK -->
+    @Test
+    fun `chapters set back to 0 on a completed entry make it plan to read`() {
+        AzitMapping.statusAfterChapterEdit(AzitMapping.COMPLETED, 0.0, 12) shouldBe AzitMapping.PLAN_TO_READ
+        AzitMapping.statusAfterChapterEdit(AzitMapping.COMPLETED, 0.0, 0) shouldBe AzitMapping.PLAN_TO_READ
+    }
+
+    @Test
+    fun `chapters set below the count on a completed entry make it reading`() {
+        AzitMapping.statusAfterChapterEdit(AzitMapping.COMPLETED, 5.0, 12) shouldBe AzitMapping.READING
+    }
+
+    @Test
+    fun `a completed entry at its full count, or with an unknown count, stays completed`() {
+        AzitMapping.statusAfterChapterEdit(AzitMapping.COMPLETED, 12.0, 12) shouldBe AzitMapping.COMPLETED
+        AzitMapping.statusAfterChapterEdit(AzitMapping.COMPLETED, 5.0, 0) shouldBe AzitMapping.COMPLETED
+    }
+
+    @Test
+    fun `other statuses are never changed by a chapter edit`() {
+        AzitMapping.statusAfterChapterEdit(AzitMapping.READING, 0.0, 12) shouldBe AzitMapping.READING
+        AzitMapping.statusAfterChapterEdit(AzitMapping.DROPPED, 3.0, 12) shouldBe AzitMapping.DROPPED
+    }
+    // KMK <--
 }

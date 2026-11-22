@@ -34,6 +34,7 @@ import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.source.online.all.MergedSource
 import eu.kanade.tachiyomi.util.chapter.getNextUnread
+import eu.kanade.tachiyomi.util.chapter.withVisibleCounts
 import eu.kanade.tachiyomi.util.removeCovers
 import exh.favorites.FavoritesSyncHelper
 import exh.log.xLogE
@@ -775,13 +776,37 @@ class LibraryScreenModel(
         }
     }
 
+    // Azit -->
+    /**
+     * The series that hide their duplicate chapters, recounted from the chapters their list shows (the unread badge,
+     * filter and sort then match the list). Merged series keep the library's own counts.
+     */
+    private suspend fun visibleCounts(libraryManga: List<LibraryManga>): List<LibraryManga> {
+        if (libraryManga.none { it.manga.hideDuplicateChapters }) return libraryManga
+        val hiddenIds = Injekt.get<eu.kanade.domain.chapter.interactor.GetHiddenChapters>().await()
+        val getExcludedScanlators = Injekt.get<eu.kanade.domain.manga.interactor.GetExcludedScanlators>()
+        return libraryManga.map { manga ->
+            if (!manga.manga.hideDuplicateChapters || manga.manga.source == MERGED_SOURCE_ID) return@map manga
+            runCatching {
+                manga.withVisibleCounts(
+                    chapters = getChaptersByMangaId.await(manga.manga.id),
+                    hiddenIds = hiddenIds,
+                    excludedScanlators = getExcludedScanlators.await(manga.manga.id),
+                )
+            }.getOrDefault(manga)
+        }
+    }
+    // Azit <--
+
     private fun getFavoritesFlow(): Flow<List<LibraryItem>> {
         return combine(
             getLibraryManga.subscribe(),
             getLibraryItemPreferencesFlow(),
             downloadCache.changes,
         ) { libraryManga, preferences, _ ->
-            libraryManga.map { manga ->
+            // Azit -->: series hiding duplicates count only the chapters their list shows
+            visibleCounts(libraryManga).map { manga ->
+                // Azit <--
                 // Display mode based on user preference: take it from global library setting or category
                 // KMK -->
                 val source = sourceManager.getOrStub(manga.manga.source)

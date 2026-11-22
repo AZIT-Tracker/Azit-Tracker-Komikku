@@ -163,6 +163,9 @@ class Azit(id: Long) : BaseTracker(id, "Azit Tracker"), DeletableTracker {
                 createIfMissing = false,
             )
         } else {
+            // KMK -->: chapters set by hand below the count (down to 0) leave "completed", else Azit undoes them
+            track.status = AzitMapping.statusAfterChapterEdit(track.status, track.last_chapter_read, track.total_chapters)
+            // KMK <--
             AzitProgressWrite.from(
                 query = boundQuery(track),
                 chapter = track.last_chapter_read,

@@ -11,7 +11,9 @@ val updaterEnabled: Boolean
     inline get() = BuildConfig.UPDATER_ENABLED
 
 val isDebugBuildType: Boolean
-    inline get() = BuildConfig.BUILD_TYPE == "debug"
+    // KMK -->: the optimized Azit build is the debug build, made smooth
+    inline get() = BuildConfig.BUILD_TYPE == "debug" || BuildConfig.BUILD_TYPE == "azit"
+// KMK <--
 
 val isPreviewBuildType: Boolean
     inline get() = BuildConfig.BUILD_TYPE == "preview"

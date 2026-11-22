@@ -846,7 +846,20 @@ class ReaderViewModel @JvmOverloads constructor(
                 (hasExtraPage && readerChapter.pages?.lastIndex?.minus(1) == page.index)
                 // SY <--
             ) {
-                updateChapterProgressOnComplete(readerChapter)
+                // Azit -->: the chapter is saved as read right away; trackers (which may be unreachable), deletions
+                // and duplicates follow in the background and never hold it back.
+                readerChapter.chapter.read = true
+                updateChapter.await(
+                    ChapterUpdate(
+                        id = readerChapter.chapter.id!!,
+                        read = true,
+                        lastPageRead = readerChapter.chapter.last_page_read.toLong(),
+                    ),
+                )
+                viewModelScope.launchNonCancellable {
+                    updateChapterProgressOnComplete(readerChapter)
+                }
+                // Azit <--
 
                 // SY -->
                 // Check if syncing is enabled for chapter read:
@@ -1448,11 +1461,13 @@ class ReaderViewModel @JvmOverloads constructor(
         val context = Injekt.get<Application>()
 
         viewModelScope.launchNonCancellable {
-            // Azit -->: an edited chapter (Chapter edition) counts as the last number given to it
-            val editions = Injekt.get<eu.kanade.domain.chapter.interactor.GetChapterEditions>().await(manga.id)
-            val number = readerChapter.chapter.id?.let { editions[it] }?.trackNumber
-                ?: readerChapter.chapter.chapter_number.toDouble()
-            trackChapter.await(context, manga.id, number)
+            // Azit -->: off the main thread; an edited chapter (Chapter edition) counts as the last number given to it
+            withIOContext {
+                val editions = Injekt.get<eu.kanade.domain.chapter.interactor.GetChapterEditions>().await(manga.id)
+                val number = readerChapter.chapter.id?.let { editions[it] }?.trackNumber
+                    ?: readerChapter.chapter.chapter_number.toDouble()
+                trackChapter.await(context, manga.id, number)
+            }
             // Azit <--
         }
     }

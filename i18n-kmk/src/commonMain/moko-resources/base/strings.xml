@@ -184,6 +184,8 @@
     <string name="azit_error_token">Azit Tracker: invalid or revoked device token</string>
     <string name="azit_error_not_found">Azit Tracker: title not found (deleted in Azit, or adding missing titles is turned off)</string>
     <string name="azit_error_http">Azit Tracker: HTTP error %d</string>
+    <string name="mangadex_session_expired_notification_title">MangaDex session expired</string>
+    <string name="mangadex_session_expired_notification_text">Log in to MangaDex again to keep syncing your follows and tracking.</string>
     <!-- Sync section -->
     <string name="pref_show_restoring_progress_banner">Show restoring progress banner</string>
     <string name="pref_show_syncing_progress_banner">Show syncing progress banner</string>

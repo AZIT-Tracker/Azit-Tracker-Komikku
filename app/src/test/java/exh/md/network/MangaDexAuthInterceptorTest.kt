@@ -3,6 +3,7 @@ package exh.md.network
 import eu.kanade.domain.track.service.TrackPreferences
 import eu.kanade.tachiyomi.data.track.mdlist.MdList
 import eu.kanade.tachiyomi.data.track.myanimelist.dto.MALOAuth
+import eu.kanade.tachiyomi.network.interceptor.MangaDexUserAgentInterceptor
 import exh.md.utils.MdUtil
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.comparables.shouldBeLessThan
@@ -11,6 +12,7 @@ import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.every
 import io.mockk.mockk
 import okhttp3.Call
+import okhttp3.FormBody
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Protocol
@@ -42,6 +44,54 @@ class MangaDexAuthInterceptorTest {
 
     /** Calls to the token endpoint, across all chains made by [chain]. */
     private var tokenRequests = 0
+
+    /** The last request sent to the token endpoint by a chain made by [chain]. */
+    private var lastTokenRequest: Request? = null
+
+    @Test
+    fun `refresh request sends the non-browser MangaDex User-Agent`() {
+        val interceptor = loggedInInterceptor()
+
+        interceptor.intercept(chain(tokenStatus = 200, tokenBody = REFRESHED_TOKEN_BODY))
+
+        tokenRequests shouldBe 1
+        val userAgent = lastTokenRequest?.header("User-Agent")
+        userAgent shouldBe MangaDexUserAgentInterceptor.defaultUserAgent()
+        userAgent!!.startsWith("Tachiyomi ") shouldBe true
+    }
+
+    @Test
+    fun `refresh request is a public client refresh grant with no other fields or credentials`() {
+        val interceptor = loggedInInterceptor(
+            oauth = MALOAuth(
+                tokenType = "Bearer",
+                refreshToken = "stored-refresh-token-a1b2c3",
+                accessToken = "expired-access-token",
+                expiresIn = 900,
+                createdAt = 0,
+            ),
+        )
+
+        interceptor.intercept(chain(tokenStatus = 200, tokenBody = REFRESHED_TOKEN_BODY))
+
+        tokenRequests shouldBe 1
+        val sent = lastTokenRequest!!
+        sent.method shouldBe "POST"
+        sent.url.toString() shouldBe "https://auth.mangadex.org/realms/mangadex/protocol/openid-connect/token"
+        // In order, each once: no code_verifier or redirect_uri, which Keycloak's refresh grant does not read.
+        sent.formFields() shouldBe listOf(
+            "client_id" to "tachiyomisy",
+            "grant_type" to "refresh_token",
+            "refresh_token" to "stored-refresh-token-a1b2c3",
+        )
+        // No Authorization header with the expired access token: only the User-Agent, and the POST() default
+        // Cache-Control.
+        sent.headers.toMultimap() shouldBe mapOf(
+            "user-agent" to listOf(MangaDexUserAgentInterceptor.defaultUserAgent()),
+            "cache-control" to listOf("max-age=600"),
+        )
+        sent.body?.contentType() shouldBe "application/x-www-form-urlencoded".toMediaType()
+    }
 
     @Test
     fun `invalid_grant on 400 or 401 is a rejection`() {
@@ -386,6 +436,7 @@ class MangaDexAuthInterceptorTest {
                 when {
                     sent.url.host == "auth.mangadex.org" -> {
                         tokenRequests++
+                        lastTokenRequest = sent
                         beforeTokenResponse()
                         response(sent, tokenStatus, tokenBody)
                     }
@@ -397,6 +448,11 @@ class MangaDexAuthInterceptorTest {
                 }
             }
         }
+    }
+
+    private fun Request.formFields(): List<Pair<String, String>> {
+        val form = body as FormBody
+        return (0 until form.size).map { form.name(it) to form.value(it) }
     }
 
     private fun response(request: Request, code: Int, body: String): Response = Response.Builder()

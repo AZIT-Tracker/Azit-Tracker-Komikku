@@ -71,6 +71,25 @@ class ChapterEditionTest {
     // The dialog: autofill
 
     @Test
+    fun `autofill keeps the decimal part of extra chapters on the new numbers`() {
+        val numbers = listOf(10.0, 10.5, 11.0, 12.0, 12.1, 12.2, 13.0)
+        val rows = numbers.mapIndexed { index, number -> ChapterEditionRow.from(index.toLong(), null, number) }
+        rows.typedAt(0, "20").texts shouldBe listOf("20", "20.5", "21", "22", "22.1", "22.2", "23")
+        // Typed on an extra: the next whole chapter is the one after it.
+        rows.typedAt(1, "7.5").texts shouldBe listOf("", "7.5", "8", "9", "9.1", "9.2", "10")
+        // Chapters without a number of their own count one by one, as before.
+        rows(3).typedAt(0, "5").texts shouldBe listOf("5", "6", "7")
+    }
+
+    @Test
+    fun `chapters split in parts keep their part number and follow the source's chapter number`() {
+        val parts = listOf(71.1, 71.2, 72.1, 72.2, 73.0)
+        val rows = parts.mapIndexed { index, number -> ChapterEditionRow.from(index.toLong(), null, number) }
+        rows.typedAt(0, "1").texts shouldBe listOf("1", "1.2", "2.1", "2.2", "3")
+        rows.typedAt(0, "1.1").texts shouldBe listOf("1.1", "1.2", "2.1", "2.2", "3")
+    }
+
+    @Test
     fun `a chapter number fills the chapters after it`() {
         rows(5).typedAt(0, "3").texts shouldBe listOf("3", "4", "5", "6", "7")
     }

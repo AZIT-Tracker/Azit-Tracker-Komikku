@@ -1,5 +1,8 @@
 package tachiyomi.domain.chapter.model
 
+import kotlin.math.floor
+import kotlin.math.round
+
 // Azit -->
 /**
  * A chapter counted as something else (selection menu -> Chapter edition): another chapter number, or a volume
@@ -57,6 +60,8 @@ data class ChapterEditionRow(
     val text: String = "",
     /** Typed by hand (autofill leaves it alone). */
     val typed: Boolean = false,
+    /** The chapter's own number (from the source), when it has one: autofill keeps its decimal part (10.5 -> 20.5). */
+    val originalNumber: Double? = null,
 ) {
     val edition: ChapterEdition? get() = ChapterEdition.parse(chapterId, isVolume, text)
 
@@ -64,12 +69,13 @@ data class ChapterEditionRow(
     val isInvalid: Boolean get() = text.isNotBlank() && edition == null
 
     companion object {
-        fun from(chapterId: Long, edition: ChapterEdition?): ChapterEditionRow {
+        fun from(chapterId: Long, edition: ChapterEdition?, originalNumber: Double? = null): ChapterEditionRow {
             return ChapterEditionRow(
                 chapterId = chapterId,
                 isVolume = edition?.isVolume ?: false,
                 text = edition?.numberText.orEmpty(),
                 typed = edition != null,
+                originalNumber = originalNumber?.takeIf { it >= 0 },
             )
         }
     }
@@ -77,7 +83,9 @@ data class ChapterEditionRow(
 
 /**
  * [text] typed in the row at [index]. When it is a chapter number, the chapters after it that weren't typed by hand
- * take the next numbers (3 -> 4, 5, 6...); volumes are skipped, a chapter typed by hand stops it.
+ * take the next numbers (3 -> 4, 5, 6...); volumes are skipped, a chapter typed by hand stops it. A chapter whose own
+ * number has a decimal part (a part: 10.5, 71.2) keeps it, the whole number following the source's:
+ * 10, 10.5, 11 with 20 typed -> 20, 20.5, 21; 71.1, 71.2, 72.1, 72.2 with 1 typed -> 1, 1.2, 2.1, 2.2.
  */
 fun List<ChapterEditionRow>.typedAt(index: Int, text: String): List<ChapterEditionRow> {
     val rows = toMutableList()
@@ -85,16 +93,32 @@ fun List<ChapterEditionRow>.typedAt(index: Int, text: String): List<ChapterEditi
     rows[index] = row.copy(text = text, typed = text.isNotBlank())
     val edition = rows[index].edition
     if (row.isVolume || edition == null) return rows
-    var next = edition.start + 1
+    var last = edition.start
+    var previousOwn = row.originalNumber
     for (i in index + 1 until rows.size) {
         val after = rows[i]
         if (after.isVolume) continue
         if (after.typed) break
-        rows[i] = after.copy(text = ChapterEdition.formatNumber(next))
-        next += 1
+        val own = after.originalNumber
+        last = when {
+            // No number of its own: one more than the previous (10.5 -> 11.5).
+            own == null -> last + 1
+            // A part (71.2, 72.1): its decimal part kept; the whole number goes up when the source's does (71 -> 72).
+            own % 1.0 != 0.0 -> {
+                val sameChapter = previousOwn != null && floor(own) == floor(previousOwn)
+                ((if (sameChapter) floor(last) else floor(last) + 1) + (own - floor(own))).roundTo4()
+            }
+            // A whole chapter: the next whole number.
+            else -> floor(last) + 1
+        }
+        previousOwn = own
+        rows[i] = after.copy(text = ChapterEdition.formatNumber(last))
     }
     return rows
 }
+
+/** 5.1000000000000005 -> 5.1 (the decimal part of a chapter number, without floating point noise). */
+private fun Double.roundTo4(): Double = round(this * 10_000) / 10_000
 
 /** Every row counted as a volume ([volume]) or as a chapter. */
 fun List<ChapterEditionRow>.allVolumes(volume: Boolean): List<ChapterEditionRow> = map { it.copy(isVolume = volume) }

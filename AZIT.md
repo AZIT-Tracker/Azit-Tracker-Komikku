@@ -2,6 +2,8 @@
 
 This fork of [Komikku](https://github.com/komikku-app/komikku) adds an **Azit Tracker** tracker. It records your
 reading in your own self-hosted Azit Tracker, the same way Komikku already updates AniList or MyAnimeList.
+Every other feature the fork adds (chapters, downloads, migration, build) is listed in
+[Everything this fork adds](#everything-this-fork-adds) at the end.
 
 - Branch: `azit-tracker` (remote `origin` = AZIT-Tracker/Azit-Tracker-Komikku; you push it yourself). Upstream Komikku is the
   `upstream` remote: `git fetch upstream && git rebase upstream/master`.
@@ -122,3 +124,70 @@ delayed tracking job.
 - Tracker id is `TrackerManager.AZIT = 100`. It is far from the upstream ids, so future upstream trackers won't
   collide with it.
 - Tests: `./gradlew :app:testDebugUnitTest --tests "*.azit.*"`
+
+## Everything this fork adds
+
+Every change compared with Komikku, by area. Code changed in Komikku files is marked `// KMK` or `// Azit`;
+new files hold only fork code.
+
+### Azit Tracker
+
+- **The tracker** (all of the above): log in with a device token, link a manga (from AniList, after logging in, on
+  a chapter read, by hand), **Create in Azit** with an editable form, sync of chapters / status / score / dates /
+  volumes, refresh, remove, **Migrate from AniList**.
+- **Manga and comics only**: Azit's novels belong to LNReader, so Komikku never sees them (search, links, type
+  guessing); every request says it is Komikku (`X-Azit-App: komikku`) and Azit refuses anything else.
+- **Doubles checked before creating**: "Create in Azit" first looks for a title with the same page, AniList id or
+  name and offers it ("Is it one of these?") instead of making a second one.
+- **Cover upload**: the cover is downloaded on the phone and uploaded to Azit (sites often refuse Azit's own
+  download).
+- **Offline queue**: chapters read while Azit (or any tracker) can't be reached wait, per tracker, and go out as
+  soon as that tracker answers again (several at once for Azit). Settings → Tracking → **Show chapters waiting to
+  be sent** lists them, why they wait, and sends them again.
+- **Unlinked entries**: Settings → Tracking → **Check unlinked entries** lists the library series not linked to
+  each tracker; tap one to link it.
+- **Manual search** when the automatic one finds nothing, from the tracking sheet.
+- **A finished series completes the entry**: reading the last chapter of a series marked Completed sets the
+  tracker entry to completed, even when the tracker doesn't know the chapter count (it gets the series' own),
+  also when sent later from the offline queue.
+- **Chapters set back by hand**: on a completed Azit entry, setting chapters below the count (down to 0) sends
+  "reading" ("plan to read" at 0), so Azit keeps the number you chose.
+
+### Chapters
+
+- **Hide duplicate chapters** (chapter filter): one copy per chapter number, the first uploaded or the last
+  uploaded ("Show the first / last uploaded").
+- **Hide chapters one by one**: selection bar → ⋮ → Hide / Unhide. Filter → **Show hidden chapters (N)** brings
+  them back faded, **Unhide all hidden chapters** clears them. Hidden chapters are left out of the reader's
+  next / previous, Updates, the Start / Resume button, the library's counts and "continue reading".
+- **The library's unread badge** (and the unread filter / sort) counts only the chapters the series' list shows:
+  hidden ones and hidden duplicates are not counted. The green downloaded badge still counts every download.
+- **Chapter edition**: selection bar → ⋮ → **Chapter edition**. Each selected chapter can count as another chapter
+  number, or as a volume holding chapters (`2` or `2-4`). A chapter number fills the chapters after it
+  (3 → 4, 5, 6…), volumes are skipped and a number typed by hand stops it; extra chapters keep their decimal part
+  (10, 10.5, 11 with 20 typed → 20, 20.5, 21). A checkbox makes them all volumes. The number pad is used, a volume
+  row has its own `-` button (some number pads have none) for ranges, and the keyboard's Next goes to the next
+  chapter; the window shrinks above the keyboard so the list scrolls down to the last one.
+  The chapter list shows the new number in grey after the name (`(Ch. 3)`, `(Ch. 2-4)` for a volume). Trackers
+  get the last number given. **Remove chapter edition** clears it.
+- **Selection bar ⋮ menu**: Hide / Unhide and Chapter edition sit in a "more" menu like the library's.
+- **Read is saved first**: the last page saves the chapter as read at once; trackers, deletions and duplicates
+  follow in the background, so an unreachable tracker never holds it back.
+
+### Downloads
+
+- **Delete after automatically marked as read**: with "after manually marked as read" also on, chapters the
+  tracker sync marks as read are deleted like the ones you mark yourself.
+- **More download-ahead amounts**, and a **custom amount** (1 to 999 chapters).
+
+### Migration
+
+- The **back arrow** of the migration screen returns to the search results of the entry you were picking (kept in
+  memory, cleared once the migration is confirmed), then to the entry; it never says "stop migrating".
+
+### App
+
+- **Blue icon** (the Azit site's colour) for the dev build, so it is told apart from a normal Komikku.
+- **`azit` build type**: optimized like a release (much smoother than debug) but the same app id and key as the
+  debug build, so it installs over it and keeps the library: `./gradlew assembleAzit`.
+- Kept up to date with Komikku (`upstream/master` merged into `azit-tracker`).

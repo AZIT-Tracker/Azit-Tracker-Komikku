@@ -2,17 +2,25 @@ package eu.kanade.presentation.manga.components
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -26,10 +34,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import tachiyomi.domain.chapter.model.Chapter
 import tachiyomi.domain.chapter.model.ChapterEdition
 import tachiyomi.domain.chapter.model.ChapterEditionRow
@@ -47,6 +59,7 @@ import tachiyomi.presentation.core.i18n.stringResource
  * volume ("2" or "2-4"). Typing a chapter number fills the chapters after it (3 -> 4, 5, 6...). A blank number keeps
  * the chapter's own. Trackers get the last number given.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ChapterEditionDialog(
     chapters: List<Chapter>,
@@ -55,7 +68,11 @@ fun ChapterEditionDialog(
     onConfirm: (editions: List<ChapterEdition>, cleared: List<Long>) -> Unit,
 ) {
     var rows by remember(chapters) {
-        mutableStateOf(chapters.map { ChapterEditionRow.from(it.id, editions[it.id]) })
+        mutableStateOf(
+            chapters.map { chapter ->
+                ChapterEditionRow.from(chapter.id, editions[chapter.id], chapter.chapterNumber.takeIf { chapter.isRecognizedNumber })
+            },
+        )
     }
     val allState = when {
         rows.all { it.isVolume } -> ToggleableState.On
@@ -63,16 +80,22 @@ fun ChapterEditionDialog(
         else -> ToggleableState.Indeterminate
     }
 
+    // The window takes the keyboard into account: the dialog shrinks above it and its list scrolls to the last chapter.
     AlertDialog(
         onDismissRequest = onDismissRequest,
+        modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing.union(WindowInsets.ime)),
+        properties = DialogProperties(decorFitsSystemWindows = false),
         title = { Text(text = stringResource(KMR.strings.action_chapter_edition)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    text = stringResource(KMR.strings.chapter_edition_help),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = LocalContentColor.current.copy(alpha = SECONDARY_ALPHA),
-                )
+                // Typing: the help makes room for the chapters.
+                if (!WindowInsets.isImeVisible) {
+                    Text(
+                        text = stringResource(KMR.strings.chapter_edition_help),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = LocalContentColor.current.copy(alpha = SECONDARY_ALPHA),
+                    )
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     TriStateCheckbox(
                         state = allState,
@@ -84,12 +107,14 @@ fun ChapterEditionDialog(
                     )
                 }
                 HorizontalDivider()
-                LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp)) {
-                    itemsIndexed(rows, key = { _, row -> row.chapterId }) { index, row ->
-                        val chapter = chapters[index]
+                // One scrolling column (not a lazy list): the keyboard's "Next" moves to the next chapter's box and
+                // scrolls to it, all the way to the last one, without closing the window.
+                Column(modifier = Modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+                    rows.forEachIndexed { index, row ->
                         ChapterEditionRowItem(
-                            chapter = chapter,
+                            chapter = chapters[index],
                             row = row,
+                            last = index == rows.lastIndex,
                             onVolumeChange = { volume ->
                                 rows = rows.toMutableList().also { it[index] = row.copy(isVolume = volume) }
                             },
@@ -122,9 +147,11 @@ fun ChapterEditionDialog(
 private fun ChapterEditionRowItem(
     chapter: Chapter,
     row: ChapterEditionRow,
+    last: Boolean,
     onVolumeChange: (Boolean) -> Unit,
     onTextChange: (String) -> Unit,
 ) {
+    val focusManager = LocalFocusManager.current
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -148,7 +175,17 @@ private fun ChapterEditionRowItem(
         OutlinedTextField(
             value = row.text,
             onValueChange = onTextChange,
-            modifier = Modifier.width(104.dp),
+            // A volume range needs "-", missing from some number pads: its own button on volume rows.
+            modifier = Modifier.width(if (row.isVolume) 136.dp else 104.dp),
+            trailingIcon = if (row.isVolume && !row.text.contains('-')) {
+                {
+                    IconButton(onClick = { onTextChange(row.text + "-") }) {
+                        Text(text = "-", style = MaterialTheme.typography.titleLarge)
+                    }
+                }
+            } else {
+                null
+            },
             singleLine = true,
             isError = row.isInvalid,
             placeholder = {
@@ -161,9 +198,15 @@ private fun ChapterEditionRowItem(
                     maxLines = 1,
                 )
             },
+            // The number pad: digits, "-" (volume ranges) and "." (10.5) on the same keys, for every box (the phone
+            // pad of some keyboards has no "-").
             keyboardOptions = KeyboardOptions(
-                // A volume range needs "-": the phone pad has it.
-                keyboardType = if (row.isVolume) KeyboardType.Phone else KeyboardType.Decimal,
+                keyboardType = KeyboardType.Decimal,
+                imeAction = if (last) ImeAction.Done else ImeAction.Next,
+            ),
+            keyboardActions = KeyboardActions(
+                onNext = { focusManager.moveFocus(FocusDirection.Down) },
+                onDone = { focusManager.clearFocus() },
             ),
         )
     }

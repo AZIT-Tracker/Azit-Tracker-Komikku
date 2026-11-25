@@ -1,5 +1,6 @@
 package eu.kanade.presentation.manga.components
 
+import android.text.InputType
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -33,9 +34,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.platform.InterceptPlatformTextInput
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -172,43 +176,70 @@ private fun ChapterEditionRowItem(
                 )
             }
         }
-        OutlinedTextField(
-            value = row.text,
-            onValueChange = onTextChange,
-            // A volume range needs "-", missing from some number pads: its own button on volume rows.
-            modifier = Modifier.width(if (row.isVolume) 136.dp else 104.dp),
-            trailingIcon = if (row.isVolume && !row.text.contains('-')) {
-                {
-                    IconButton(onClick = { onTextChange(row.text + "-") }) {
-                        Text(text = "-", style = MaterialTheme.typography.titleLarge)
+        NumberKeypad {
+            OutlinedTextField(
+                value = row.text,
+                // Only what a chapter number or a volume range can hold: digits, "." or "," (10.5) and "-" (2-4).
+                onValueChange = { onTextChange(it.onlyNumberCharacters()) },
+                // A volume range needs "-", missing from some number pads: its own button on volume rows.
+                modifier = Modifier.width(if (row.isVolume) 136.dp else 104.dp),
+                trailingIcon = if (row.isVolume && !row.text.contains('-')) {
+                    {
+                        IconButton(onClick = { onTextChange(row.text + "-") }) {
+                            Text(text = "-", style = MaterialTheme.typography.titleLarge)
+                        }
                     }
-                }
-            } else {
-                null
-            },
-            singleLine = true,
-            isError = row.isInvalid,
-            placeholder = {
-                Text(
-                    text = if (row.isVolume) {
-                        stringResource(KMR.strings.chapter_edition_volume_hint)
-                    } else {
-                        ChapterEdition.formatNumber(chapter.chapterNumber).takeIf { chapter.isRecognizedNumber }.orEmpty()
-                    },
-                    maxLines = 1,
-                )
-            },
-            // The number pad: digits, "-" (volume ranges) and "." (10.5) on the same keys, for every box (the phone
-            // pad of some keyboards has no "-").
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Decimal,
-                imeAction = if (last) ImeAction.Done else ImeAction.Next,
-            ),
-            keyboardActions = KeyboardActions(
-                onNext = { focusManager.moveFocus(FocusDirection.Down) },
-                onDone = { focusManager.clearFocus() },
-            ),
-        )
+                } else {
+                    null
+                },
+                singleLine = true,
+                isError = row.isInvalid,
+                placeholder = {
+                    Text(
+                        text = if (row.isVolume) {
+                            stringResource(KMR.strings.chapter_edition_volume_hint)
+                        } else {
+                            ChapterEdition.formatNumber(chapter.chapterNumber).takeIf { chapter.isRecognizedNumber }.orEmpty()
+                        },
+                        maxLines = 1,
+                    )
+                },
+                // The number pad; NumberKeypad makes it a signed one so it also has "-" (volume ranges).
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Decimal,
+                    imeAction = if (last) ImeAction.Done else ImeAction.Next,
+                ),
+                keyboardActions = KeyboardActions(
+                    onNext = { focusManager.moveFocus(FocusDirection.Down) },
+                    onDone = { focusManager.clearFocus() },
+                ),
+            )
+        }
     }
+}
+
+/** Keeps only digits, "." / "," and "-". */
+internal fun String.onlyNumberCharacters(): String = filter { it.isDigit() || it == '.' || it == ',' || it == '-' }
+
+/**
+ * Asks the keyboard for a signed decimal number pad: digits, "." and "-" only. Compose's KeyboardType.Decimal leaves
+ * out "-" (Samsung's pad shows digits, "." and "," only), so the input type the keyboard receives gets the signed flag.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun NumberKeypad(content: @Composable () -> Unit) {
+    InterceptPlatformTextInput(
+        interceptor = { request, nextHandler ->
+            val signedRequest = PlatformTextInputMethodRequest { outAttributes ->
+                request.createInputConnection(outAttributes).also {
+                    outAttributes.inputType = InputType.TYPE_CLASS_NUMBER or
+                        InputType.TYPE_NUMBER_FLAG_DECIMAL or
+                        InputType.TYPE_NUMBER_FLAG_SIGNED
+                }
+            }
+            nextHandler.startInputMethod(signedRequest)
+        },
+        content = content,
+    )
 }
 // Azit <--

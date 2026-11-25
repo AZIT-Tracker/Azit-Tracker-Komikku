@@ -130,6 +130,33 @@ fun List<ChapterEditionRow>.toChanges(): Pair<List<ChapterEdition>, List<Long>> 
     return editions to cleared
 }
 
+/** The first number of a chapter: the one given in Chapter edition, or its own [chapterNumber]. */
+fun ChapterEdition?.firstNumber(chapterNumber: Double): Double = this?.start ?: chapterNumber
+
+/** The last number of a chapter: the last one given in Chapter edition (a volume's range end), or its own. */
+fun ChapterEdition?.lastNumber(chapterNumber: Double): Double = this?.trackNumber ?: chapterNumber
+
+/**
+ * The whole chapter numbers a chapter covers: every number of an edited volume's range (2-4 -> 2, 3, 4), the number
+ * given in Chapter edition, or its own [chapterNumber] (-1, unknown, when it has none).
+ */
+fun ChapterEdition?.coveredNumbers(chapterNumber: Double): List<Double> {
+    if (this == null) return listOf(chapterNumber)
+    val first = floor(start).toLong()
+    val last = floor(trackNumber).toLong()
+    return (first..last).map(Long::toDouble)
+}
+
+/**
+ * Chapters missing between two chapters, in whichever order they come: the numbers after the lower one's last
+ * number and before the higher one's first number. 0 when either number is unknown or they overlap.
+ */
+fun missingBetween(first1: Double, last1: Double, first2: Double, last2: Double): Int {
+    if (first1 < 0.0 || first2 < 0.0) return 0
+    val (lowerLast, higherFirst) = if (first1 <= first2) last1 to first2 else last2 to first1
+    return (floor(higherFirst).toInt() - floor(lowerLast).toInt() - 1).coerceAtLeast(0)
+}
+
 /** The chapters as trackers see them: an edited chapter's number becomes the last number given. */
 fun List<Chapter>.withEditedNumbers(editions: Map<Long, ChapterEdition>): List<Chapter> {
     if (editions.isEmpty()) return this

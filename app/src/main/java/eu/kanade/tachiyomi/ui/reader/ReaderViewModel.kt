@@ -333,12 +333,19 @@ class ReaderViewModel @JvmOverloads constructor(
             // Read in the same background thread as the chapters above.
             runBlocking { Injekt.get<eu.kanade.domain.chapter.interactor.GetHiddenChapters>().await() }
         }
+        val editions = runBlocking {
+            Injekt.get<eu.kanade.domain.chapter.interactor.GetChapterEditions>().await(manga.id)
+        }
         // Azit <--
         chaptersForReader
             // Azit -->
             .withoutHiddenChapters(hiddenIds, keepId = chapterId) { it.id }
             // Azit <--
-            .sortedWith(getChapterSort(manga, sortDescending = false))
+            // Azit -->: by chapter number, an edited chapter sorts by the number given to it
+            .sortedWith(
+                getChapterSort(manga, sortDescending = false, numberOf = { editions[it.id]?.start ?: it.chapterNumber }),
+            )
+            // Azit <--
             .run {
                 if (
                     readerPreferences.skipDupe().get() ||

@@ -25,9 +25,10 @@ import coil3.request.ImageRequest
 import coil3.request.allowHardware
 import eu.kanade.core.preference.asState
 import eu.kanade.core.util.addOrRemove
-import eu.kanade.core.util.insertSeparators
 import eu.kanade.domain.chapter.interactor.GetAvailableScanlators
 import eu.kanade.domain.chapter.interactor.SetReadStatus
+import eu.kanade.domain.chapter.model.itemSort
+import eu.kanade.domain.chapter.model.withMissingCounts
 import eu.kanade.domain.manga.interactor.GetExcludedScanlators
 import eu.kanade.domain.manga.interactor.GetPagePreviews
 import eu.kanade.domain.manga.interactor.SetExcludedScanlators
@@ -129,7 +130,6 @@ import tachiyomi.domain.chapter.model.Chapter
 import tachiyomi.domain.chapter.model.ChapterEdition
 import tachiyomi.domain.chapter.model.ChapterUpdate
 import tachiyomi.domain.chapter.model.NoChaptersException
-import tachiyomi.domain.chapter.service.calculateChapterGap
 import tachiyomi.domain.chapter.service.getChapterSort
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.libraryUpdateError.interactor.DeleteLibraryUpdateErrors
@@ -170,7 +170,6 @@ import tachiyomi.source.local.isLocal
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
-import kotlin.math.floor
 import androidx.compose.runtime.State as RuntimeState
 
 class MangaScreenModel(
@@ -1311,7 +1310,10 @@ class MangaScreenModel(
 
     private fun getUnreadChaptersSorted(): List<Chapter> {
         val manga = successState?.manga ?: return emptyList()
-        val chaptersSorted = getUnreadChapters().sortedWith(getChapterSort(manga))
+        val chaptersSorted = getUnreadChapters()
+            // Azit -->: by chapter number, an edited chapter sorts by the number given to it
+            .sortedWith(getChapterSort(manga, numberOf = { chapterEditions[it.id]?.start ?: it.chapterNumber }))
+            // Azit <--
             // SY -->
             .let {
                 if (manga.isEhBasedManga()) it.reversed() else it
@@ -2162,30 +2164,9 @@ class MangaScreenModel(
                     return@lazy processedChapters
                 }
 
-                processedChapters.insertSeparators { before, after ->
-                    val (lowerChapter, higherChapter) = if (manga.sortDescending()) {
-                        after to before
-                    } else {
-                        before to after
-                    }
-                    if (higherChapter == null) return@insertSeparators null
-
-                    if (lowerChapter == null) {
-                        floor(higherChapter.chapter.chapterNumber)
-                            .toInt()
-                            .minus(1)
-                            .coerceAtLeast(0)
-                    } else {
-                        calculateChapterGap(higherChapter.chapter, lowerChapter.chapter)
-                    }
-                        .takeIf { it > 0 }
-                        ?.let { missingCount ->
-                            ChapterList.MissingCount(
-                                id = "${lowerChapter?.id}-${higherChapter.id}",
-                                count = missingCount,
-                            )
-                        }
-                }
+                // Azit -->: counted with the numbers given in Chapter edition (a volume covers its whole range)
+                processedChapters.withMissingCounts(manga.sortDescending())
+                // Azit <--
             }
 
             val scanlatorFilterActive: Boolean
@@ -2219,7 +2200,9 @@ class MangaScreenModel(
                     .filter { (chapter) -> applyFilter(unreadFilter) { !chapter.read } }
                     .filter { (chapter) -> applyFilter(bookmarkedFilter) { chapter.bookmark } }
                     .filter { applyFilter(downloadedFilter) { it.isDownloaded || isLocalManga } }
-                    .sortedWith { (chapter1), (chapter2) -> getChapterSort(manga).invoke(chapter1, chapter2) }
+                    // Azit -->: by chapter number, an edited chapter sorts by the number given to it
+                    .sortedWith(itemSort(manga))
+                // Azit <--
             }
         }
     }

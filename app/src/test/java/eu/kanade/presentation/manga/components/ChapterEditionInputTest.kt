@@ -19,5 +19,17 @@ class ChapterEditionInputTest {
         "Ch. 12 a+b (3)".onlyNumberCharacters() shouldBe ".123"
         " 2 - 4 ".onlyNumberCharacters() shouldBe "2-4"
     }
+
+    @Test
+    fun `the keypad has every digit, a dot and a dash, each on its own key, and no comma`() {
+        val keys = NUMBER_KEYPAD_ROWS.flatten()
+        val typed = keys.filter { it != BACKSPACE_KEY && it != NEXT_KEY }
+
+        typed.sorted() shouldBe (('0'..'9').map(Char::toString) + "." + "-").sorted()
+        keys.count { it == "." } shouldBe 1
+        keys.count { it == "-" } shouldBe 1
+        keys.none { it.contains(',') } shouldBe true
+        keys.filter { it == BACKSPACE_KEY || it == NEXT_KEY } shouldBe listOf(BACKSPACE_KEY, NEXT_KEY)
+    }
 }
 // Azit <--

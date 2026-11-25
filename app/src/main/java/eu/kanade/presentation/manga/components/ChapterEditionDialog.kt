@@ -1,5 +1,7 @@
 package eu.kanade.presentation.manga.components
 
+import android.content.Context
+import android.provider.Settings
 import android.text.InputType
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -37,6 +39,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.platform.InterceptPlatformTextInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.state.ToggleableState
@@ -155,6 +158,9 @@ private fun ChapterEditionRowItem(
     onTextChange: (String) -> Unit,
 ) {
     val focusManager = LocalFocusManager.current
+    val context = LocalContext.current
+    // Samsung's number pad shares one key between "." and "-" and adds a "," key: there "," types "-".
+    val commaIsDash = remember { context.usesSamsungKeyboard() }
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -179,7 +185,7 @@ private fun ChapterEditionRowItem(
             OutlinedTextField(
                 value = row.text,
                 // Only what a chapter number or a volume range can hold: digits, "." (10.5) and "-" (2-4).
-                onValueChange = { onTextChange(it.onlyNumberCharacters()) },
+                onValueChange = { onTextChange(it.onlyNumberCharacters(commaIsDash)) },
                 modifier = Modifier.width(if (row.isVolume) 136.dp else 104.dp),
                 singleLine = true,
                 isError = row.isInvalid,
@@ -207,8 +213,18 @@ private fun ChapterEditionRowItem(
     }
 }
 
-/** Keeps only digits, "." and "-"; a "," (the decimal key of some keyboards) becomes ".". */
-internal fun String.onlyNumberCharacters(): String = replace(',', '.').filter { it.isDigit() || it == '.' || it == '-' }
+/**
+ * Keeps only digits, "." and "-". A "," becomes "." (the decimal key of some keyboards), or "-" when [commaIsDash]
+ * (Samsung's number pad, where "." and "-" share a key and "," has one of its own).
+ */
+internal fun String.onlyNumberCharacters(commaIsDash: Boolean = false): String =
+    replace(',', if (commaIsDash) '-' else '.').filter { it.isDigit() || it == '.' || it == '-' }
+
+/** Whether the keyboard in use is Samsung's. */
+private fun Context.usesSamsungKeyboard(): Boolean {
+    val keyboard = Settings.Secure.getString(contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD).orEmpty()
+    return keyboard.startsWith("com.samsung.android.honeyboard")
+}
 
 /**
  * Asks the keyboard for a signed decimal number pad: digits, "." and "-" only. Compose's KeyboardType.Decimal leaves

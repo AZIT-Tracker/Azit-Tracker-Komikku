@@ -20,6 +20,12 @@ class ChapterEditionInputTest {
     }
 
     @Test
+    fun `on Samsung's number pad a comma types a dash`() {
+        "105,107".onlyNumberCharacters(commaIsDash = true) shouldBe "105-107"
+        "10.5,12".onlyNumberCharacters(commaIsDash = true) shouldBe "10.5-12"
+    }
+
+    @Test
     fun `anything else is dropped`() {
         "Ch. 12 a+b (3)".onlyNumberCharacters() shouldBe ".123"
         " 2 - 4 ".onlyNumberCharacters() shouldBe "2-4"

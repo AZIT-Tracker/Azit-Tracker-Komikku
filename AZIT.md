@@ -177,8 +177,9 @@ new files hold only fork code.
   missing), in the header's count and the "N missing chapters" rows; the row for the chapters before the first one
   only shows next to the lowest chapter.
 - **Chapter edition keyboard**: the phone's keyboard opens as a signed number pad, so it has digits, "." and "-"
-  (Samsung's plain number pad has no "-"; the keyboard app decides where the keys go). A "," typed becomes "."
-  and anything else is dropped.
+  (Samsung's plain number pad has no "-"; the keyboard app decides where the keys go). A "," typed becomes ".",
+  except on Samsung's keyboard, whose pad shares one key between "." and "-": there the "," key types "-". Anything
+  else is dropped.
 - **Selection bar ⋮ menu**: Hide / Unhide and Chapter edition sit in a "more" menu like the library's.
 - **Read is saved first**: the last page saves the chapter as read at once; trackers, deletions and duplicates
   follow in the background, so an unreachable tracker never holds it back.

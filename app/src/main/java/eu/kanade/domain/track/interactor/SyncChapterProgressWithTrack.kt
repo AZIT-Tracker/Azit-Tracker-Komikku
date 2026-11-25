@@ -86,6 +86,8 @@ class SyncChapterProgressWithTrack(
          * any abnormal chapter number will stop it from updating read status further.
          * Some mangas has name such as Volume 2 Chapter 1 which will corrupt the order
          * if we sort by chapterNumber.
+         * Azit: nothing is marked read while the tracker is below chapter 1; at 0 nothing was read yet, so a
+         * chapter 0 (a prologue) must stay unread.
          */
         val chaptersToMarkRead = dbChapters
             .takeWhile { chapter ->
@@ -96,6 +98,9 @@ class SyncChapterProgressWithTrack(
                 // Azit <--
             }
             .filter { chapter -> !chapter.read }
+            // Azit -->
+            .filter { remoteTrack.lastChapterRead >= 1.0 }
+        // Azit <--
         val chapterUpdates = chaptersToMarkRead
             // KMK <--
             .map { it.copy(read = true).toChapterUpdate() }

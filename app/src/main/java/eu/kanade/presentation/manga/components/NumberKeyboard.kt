@@ -32,6 +32,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
@@ -106,7 +109,7 @@ internal fun NumberKeyboard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+                .background(keyboardBackground())
                 .windowInsetsPadding(WindowInsets.navigationBars)
                 .padding(horizontal = 6.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -142,13 +145,7 @@ private fun RowScope.KeyboardKey(key: NumberKey?, last: Boolean, onKey: (NumberK
     Box(
         modifier = keyModifier
             .clip(RoundedCornerShape(10.dp))
-            .background(
-                if (pressed) {
-                    MaterialTheme.colorScheme.surfaceContainerHighest
-                } else {
-                    MaterialTheme.colorScheme.surfaceContainerHigh
-                },
-            )
+            .background(keyColor(pressed))
             .semantics {
                 role = Role.Button
                 contentDescription = description
@@ -194,6 +191,29 @@ private fun RowScope.KeyboardKey(key: NumberKey?, last: Boolean, onKey: (NumberK
             )
         }
     }
+}
+
+/**
+ * Behind the keys: a step darker than the theme's surfaces in a dark theme (a light grey in a light one),
+ * so the keys stand out on a plain, even background like the phone's keyboard.
+ */
+@Composable
+private fun keyboardBackground(): Color {
+    val colors = MaterialTheme.colorScheme
+    return if (colors.surface.luminance() < 0.5f) {
+        lerp(colors.surfaceContainerLowest, Color.Black, 0.45f)
+    } else {
+        colors.surfaceContainerHighest
+    }
+}
+
+/** A key: lighter than the background in a dark theme, white-ish in a light one; a little lighter / darker pressed. */
+@Composable
+private fun keyColor(pressed: Boolean): Color {
+    val colors = MaterialTheme.colorScheme
+    val dark = colors.surface.luminance() < 0.5f
+    val key = if (dark) colors.surfaceContainerHighest else colors.surfaceContainerLowest
+    return if (pressed) lerp(key, colors.onSurface, 0.12f) else key
 }
 
 @Composable

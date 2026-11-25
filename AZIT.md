@@ -141,6 +141,8 @@ new files hold only fork code.
   name and offers it ("Is it one of these?") instead of making a second one.
 - **Cover upload**: the cover is downloaded on the phone and uploaded to Azit (sites often refuse Azit's own
   download).
+- **Chapter 0 waits for chapter 1**: while the tracker is at 0, its sync marks nothing read, so a chapter 0 (a
+  prologue) stays unread until chapter 1 is read.
 - **Offline queue**: chapters read while Azit (or any tracker) can't be reached wait, per tracker, and go out as
   soon as that tracker answers again (several at once for Azit). Settings → Tracking → **Show chapters waiting to
   be sent** lists them, why they wait, and sends them again.

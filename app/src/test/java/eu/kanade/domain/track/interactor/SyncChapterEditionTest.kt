@@ -132,5 +132,29 @@ class SyncChapterEditionTest {
 
         updated.map { it.id }.sorted() shouldBe listOf(1L, 2L, 3L)
     }
+
+    private fun chaptersFromZero() = (0..3).map { number ->
+        Chapter.create().copy(
+            id = number.toLong() + 10,
+            mangaId = 1L,
+            chapterNumber = number.toDouble(),
+            sourceOrder = (3 - number).toLong(),
+            read = false,
+        )
+    }
+
+    @Test
+    fun `chapter 0 stays unread while the tracker is at 0`() {
+        sync(chaptersFromZero(), emptyMap(), track(0.0))
+
+        updated shouldBe emptyList()
+    }
+
+    @Test
+    fun `chapter 0 is marked read once the tracker reaches chapter 1`() {
+        sync(chaptersFromZero(), emptyMap(), track(1.0))
+
+        updated.map { it.id }.sorted() shouldBe listOf(10L, 11L)
+    }
 }
 // Azit <--

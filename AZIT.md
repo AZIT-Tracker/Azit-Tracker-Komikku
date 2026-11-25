@@ -172,6 +172,13 @@ new files hold only fork code.
   chapter; the window shrinks above the keyboard so the list scrolls down to the last one.
   The chapter list shows the new number in grey after the name (`(Ch. 3)`, `(Ch. 2-4)` for a volume). Trackers
   get the last number given. **Remove chapter edition** clears it.
+- **Sort by chapter number uses Chapter edition**: an edited chapter sorts by the number given to it (a volume by
+  its first number), in the chapter list, the reader's next / previous and "download next".
+- **Missing chapters count with Chapter edition**: a volume covers its whole range (39-43 then 44-49 leaves nothing
+  missing), in the header's count and the "N missing chapters" rows; the row for the chapters before the first one
+  only shows next to the lowest chapter.
+- **Chapter edition keyboard**: the number boxes ask for a signed number pad, so the keyboard shows digits, "." and
+  "-" (Samsung's plain number pad has no "-"); anything else typed or pasted is dropped.
 - **Selection bar ⋮ menu**: Hide / Unhide and Chapter edition sit in a "more" menu like the library's.
 - **Read is saved first**: the last page saves the chapter as read at once; trackers, deletions and duplicates
   follow in the background, so an unreachable tracker never holds it back.

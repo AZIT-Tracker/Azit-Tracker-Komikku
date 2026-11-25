@@ -112,6 +112,7 @@ import exh.ui.metadata.adapters.MangaDexDescription
 import exh.ui.metadata.adapters.NHentaiDescription
 import exh.ui.metadata.adapters.PururinDescription
 import tachiyomi.domain.chapter.model.Chapter
+import tachiyomi.domain.chapter.model.coveredNumbers
 import tachiyomi.domain.chapter.service.missingChaptersCount
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.manga.model.Manga
@@ -799,7 +800,8 @@ private fun MangaScreenSmallImpl(
                         contentType = MangaScreenItem.CHAPTER_HEADER,
                     ) {
                         val missingChapterCount = remember(chapters) {
-                            chapters.map { it.chapter.chapterNumber }.missingChaptersCount()
+                            /* Azit --> */ chapters.flatMap { it.edition.coveredNumbers(it.chapter.chapterNumber) }
+                                /* Azit <-- */.missingChaptersCount()
                         }
                         ChapterHeader(
                             enabled = !isAnySelected,
@@ -1244,7 +1246,8 @@ private fun MangaScreenLargeImpl(
                                 contentType = MangaScreenItem.CHAPTER_HEADER,
                             ) {
                                 val missingChapterCount = remember(chapters) {
-                                    chapters.map { it.chapter.chapterNumber }.missingChaptersCount()
+                                    /* Azit --> */ chapters.flatMap { it.edition.coveredNumbers(it.chapter.chapterNumber) }
+                                        /* Azit <-- */.missingChaptersCount()
                                 }
                                 ChapterHeader(
                                     enabled = !isAnySelected,

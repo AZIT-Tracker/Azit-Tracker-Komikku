@@ -7,6 +7,10 @@ import tachiyomi.domain.manga.model.Manga
 fun getChapterSort(
     manga: Manga,
     sortDescending: Boolean = manga.sortDescending(),
+    // Azit -->
+    /** The number "by chapter number" sorts on: an edited chapter (Chapter edition) uses the number given to it. */
+    numberOf: (Chapter) -> Double = { it.chapterNumber },
+    // Azit <--
 ): (
     Chapter,
     Chapter,
@@ -17,8 +21,10 @@ fun getChapterSort(
             false -> { c1, c2 -> c2.sourceOrder.compareTo(c1.sourceOrder) }
         }
         Manga.CHAPTER_SORTING_NUMBER -> when (sortDescending) {
-            true -> { c1, c2 -> c2.chapterNumber.compareTo(c1.chapterNumber) }
-            false -> { c1, c2 -> c1.chapterNumber.compareTo(c2.chapterNumber) }
+            // Azit -->
+            true -> { c1, c2 -> numberOf(c2).compareTo(numberOf(c1)) }
+            false -> { c1, c2 -> numberOf(c1).compareTo(numberOf(c2)) }
+            // Azit <--
         }
         Manga.CHAPTER_SORTING_UPLOAD_DATE -> when (sortDescending) {
             true -> { c1, c2 -> c2.dateUpload.compareTo(c1.dateUpload) }

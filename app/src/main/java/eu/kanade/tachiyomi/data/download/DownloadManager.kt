@@ -255,8 +255,21 @@ class DownloadManager(
             removeFromDownloadQueue(filteredChapters)
 
             val (mangaDir, chapterDirs) = provider.findChapterDirs(filteredChapters, manga, source)
-            chapterDirs.forEach { it.delete() }
-            cache.removeChapters(filteredChapters, manga)
+            // Azit -->: a folder that couldn't be deleted (busy, storage error) stays in the cache, as it is still on
+            // disk, and is tried again the next time pending deletions run, instead of being forgotten.
+            val failedDirNames = chapterDirs
+                .filterNot { it.delete() || !it.exists() }
+                .mapNotNullTo(HashSet()) { it.name }
+            val (failed, deleted) = filteredChapters.partition { chapter ->
+                provider.getValidChapterDirNames(chapter.name, chapter.scanlator, chapter.url)
+                    .any { it in failedDirNames }
+            }
+            if (failed.isNotEmpty()) {
+                logcat(LogPriority.ERROR) { "Couldn't delete ${failed.size} chapter(s) of ${manga.ogTitle}, retrying later" }
+                pendingDeleter.addChapters(failed, manga)
+            }
+            cache.removeChapters(deleted, manga)
+            // Azit <--
 
             // Delete manga directory if empty
             if (mangaDir?.listFiles()?.isEmpty() == true) {

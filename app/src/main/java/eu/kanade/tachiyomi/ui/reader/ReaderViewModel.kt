@@ -45,12 +45,15 @@ import eu.kanade.tachiyomi.ui.reader.viewer.Viewer
 import eu.kanade.tachiyomi.ui.reader.viewer.pager.PagerViewer
 import eu.kanade.tachiyomi.ui.reader.viewer.pager.R2LPagerViewer
 import eu.kanade.tachiyomi.util.chapter.filterDownloaded
+import eu.kanade.tachiyomi.util.chapter.hiddenCopiesOf
 import eu.kanade.tachiyomi.util.chapter.removeDuplicates
+import eu.kanade.tachiyomi.util.chapter.shownChapterIds
 import eu.kanade.tachiyomi.util.editCover
 import eu.kanade.tachiyomi.util.lang.byteSize
 import eu.kanade.tachiyomi.util.storage.DiskUtil
 import eu.kanade.tachiyomi.util.storage.DiskUtil.MAX_FILE_NAME_BYTES
 import eu.kanade.tachiyomi.util.storage.cacheImageDir
+import exh.log.xLogE
 import exh.metadata.metadata.RaisedSearchMetadata
 import exh.source.MERGED_SOURCE_ID
 import exh.source.getMainSource
@@ -1495,9 +1498,30 @@ class ReaderViewModel @JvmOverloads constructor(
         // SY <--
 
         viewModelScope.launchNonCancellable {
-            downloadManager.enqueueChaptersToDelete(listOf(chapter.chapter.toDomainChapter()!!), manga)
+            // Azit -->: the copies of this chapter its list hides (hidden duplicates, copies hidden one by one) go
+            // with it, or their downloads would stay behind, never shown in the series but counted in the library.
+            val domainChapter = chapter.chapter.toDomainChapter()!!
+            val hiddenCopies = runCatching { hiddenCopiesToDelete(domainChapter, manga) }
+                .onFailure { xLogE("Couldn't find the hidden copies of a read chapter", it) }
+                .getOrDefault(emptyList())
+            downloadManager.enqueueChaptersToDelete(listOf(domainChapter) + hiddenCopies, manga)
+            // Azit <--
         }
     }
+
+    // Azit -->
+    /** The downloaded copies of [chapter] its series' list doesn't show (see [hiddenCopiesOf]). */
+    private suspend fun hiddenCopiesToDelete(chapter: Chapter, manga: Manga): List<Chapter> {
+        if (manga.source == MERGED_SOURCE_ID) return emptyList()
+        val hiddenIds = Injekt.get<eu.kanade.domain.chapter.interactor.GetHiddenChapters>().await()
+        val shownIds = getChaptersByMangaId.await(manga.id, applyFilter = true).shownChapterIds(manga, hiddenIds)
+        return getChaptersByMangaId.await(manga.id, applyFilter = false)
+            .hiddenCopiesOf(chapter, shownIds)
+            .filter {
+                downloadManager.isChapterDownloaded(it.name, it.scanlator, it.url, manga.ogTitle, manga.source)
+            }
+    }
+    // Azit <--
 
     /**
      * Deletes all the pending chapters. This operation will run in a background thread and errors

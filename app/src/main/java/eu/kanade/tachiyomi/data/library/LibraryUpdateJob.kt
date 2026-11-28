@@ -31,6 +31,7 @@ import eu.kanade.tachiyomi.data.track.TrackStatus
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.model.UpdateStrategy
+import eu.kanade.tachiyomi.util.chapter.shownChapterIds
 import eu.kanade.tachiyomi.util.system.isConnectedToWifi
 import eu.kanade.tachiyomi.util.system.isRunning
 import eu.kanade.tachiyomi.util.system.setForegroundSafely
@@ -452,6 +453,9 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
 
                                         if (newChapters.isNotEmpty()) {
                                             val chaptersToDownload = filterChaptersForDownload.await(manga, newChapters)
+                                                // Azit -->
+                                                .onlyShown(manga)
+                                            // Azit <--
 
                                             if (chaptersToDownload.isNotEmpty()) {
                                                 downloadChapters(manga, chaptersToDownload)
@@ -502,6 +506,24 @@ class LibraryUpdateJob(private val context: Context, workerParams: WorkerParamet
             )
         }
     }
+
+    // Azit -->
+    /**
+     * The new chapters [manga]'s list will show: a copy it hides (a duplicate behind the copy it keeps, an excluded
+     * scanlator's) isn't downloaded, it would only take room and count in the library's download badge.
+     */
+    private suspend fun List<Chapter>.onlyShown(manga: Manga): List<Chapter> {
+        if (isEmpty() || manga.source == MERGED_SOURCE_ID) return this
+        return runCatching {
+            val hiddenIds = Injekt.get<eu.kanade.domain.chapter.interactor.GetHiddenChapters>().await()
+            val shownIds = Injekt.get<tachiyomi.domain.chapter.interactor.GetChaptersByMangaId>()
+                .await(manga.id, applyFilter = true)
+                .shownChapterIds(manga, hiddenIds)
+            filter { it.id in shownIds }
+        }.onFailure { xLogE("Couldn't tell which new chapters the list shows", it) }
+            .getOrDefault(this)
+    }
+    // Azit <--
 
     private fun downloadChapters(manga: Manga, chapters: List<Chapter>) {
         // We don't want to start downloading while the library is updating, because websites

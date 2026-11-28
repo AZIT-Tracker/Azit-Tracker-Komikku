@@ -34,6 +34,7 @@ import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.source.online.all.MergedSource
 import eu.kanade.tachiyomi.util.chapter.getNextUnread
+import eu.kanade.tachiyomi.util.chapter.shownChapterIds
 import eu.kanade.tachiyomi.util.chapter.withVisibleCounts
 import eu.kanade.tachiyomi.util.removeCovers
 import exh.favorites.FavoritesSyncHelper
@@ -465,7 +466,9 @@ class LibraryScreenModel(
                             .sumOf { manga -> downloadManager.getDownloadCount(manga) } > 0
                     } else {
                         // KMK <--
-                        downloadManager.getDownloadCount(it.libraryManga.manga) > 0
+                        // Azit -->: a series counts as downloaded by what its list shows, like the badge
+                        shownDownloadCount(it.libraryManga.manga) > 0
+                        // Azit <--
                     }
             }
         }
@@ -781,9 +784,8 @@ class LibraryScreenModel(
      * The series that hide their duplicate chapters, recounted from the chapters their list shows (the unread badge,
      * filter and sort then match the list). Merged series keep the library's own counts.
      */
-    private suspend fun visibleCounts(libraryManga: List<LibraryManga>): List<LibraryManga> {
+    private suspend fun visibleCounts(libraryManga: List<LibraryManga>, hiddenIds: Set<Long>): List<LibraryManga> {
         if (libraryManga.none { it.manga.hideDuplicateChapters }) return libraryManga
-        val hiddenIds = Injekt.get<eu.kanade.domain.chapter.interactor.GetHiddenChapters>().await()
         val getExcludedScanlators = Injekt.get<eu.kanade.domain.manga.interactor.GetExcludedScanlators>()
         return libraryManga.map { manga ->
             if (!manga.manga.hideDuplicateChapters || manga.manga.source == MERGED_SOURCE_ID) return@map manga
@@ -796,6 +798,32 @@ class LibraryScreenModel(
             }.getOrDefault(manga)
         }
     }
+
+    /**
+     * How many of [manga]'s chapters are downloaded, counted from the chapters its list shows (no excluded
+     * scanlator, no copy hidden one by one or as a duplicate): the download badge and the "Downloaded" filter then
+     * match the series' list. A folder on disk that no shown chapter owns isn't counted. Local and merged series
+     * keep the folder count.
+     */
+    private suspend fun shownDownloadCount(manga: Manga, hiddenIds: Set<Long>? = null): Int {
+        val onDisk = downloadManager.getDownloadCount(manga)
+        if (onDisk == 0 || manga.isLocal() || manga.source == MERGED_SOURCE_ID) return onDisk
+        return runCatching {
+            val hidden = hiddenIds ?: Injekt.get<eu.kanade.domain.chapter.interactor.GetHiddenChapters>().await()
+            val chapters = getChaptersByMangaId.await(manga.id, applyFilter = true)
+            val shownIds = chapters.shownChapterIds(manga, hidden)
+            chapters.count { chapter ->
+                chapter.id in shownIds &&
+                    downloadManager.isChapterDownloaded(
+                        chapter.name,
+                        chapter.scanlator,
+                        chapter.url,
+                        manga.ogTitle,
+                        manga.source,
+                    )
+            }
+        }.getOrDefault(onDisk)
+    }
     // Azit <--
 
     private fun getFavoritesFlow(): Flow<List<LibraryItem>> {
@@ -803,9 +831,12 @@ class LibraryScreenModel(
             getLibraryManga.subscribe(),
             getLibraryItemPreferencesFlow(),
             downloadCache.changes,
-        ) { libraryManga, preferences, _ ->
+            // Azit -->: hiding or showing a chapter changes what its series' badges count
+            Injekt.get<eu.kanade.domain.chapter.interactor.GetHiddenChapters>().subscribe(),
+            // Azit <--
+        ) { libraryManga, preferences, _, hiddenIds ->
             // Azit -->: series hiding duplicates count only the chapters their list shows
-            visibleCounts(libraryManga).map { manga ->
+            visibleCounts(libraryManga, hiddenIds).map { manga ->
                 // Azit <--
                 // Display mode based on user preference: take it from global library setting or category
                 // KMK -->
@@ -822,7 +853,9 @@ class LibraryScreenModel(
                                 .sumOf { downloadManager.getDownloadCount(it) }.toLong()
                         } else {
                             // SY <--
-                            downloadManager.getDownloadCount(manga.manga).toLong()
+                            // Azit -->: the downloads the series' list shows, never a hidden copy's
+                            shownDownloadCount(manga.manga, hiddenIds).toLong()
+                            // Azit <--
                         }
                     } else {
                         0
